@@ -60,6 +60,14 @@ frontend/
       auth.ts
 ```
 
+前端工程约定（第一阶段定规范）：
+- `lib/auth.ts` 统一管理登录态（Context 或 Zustand 二选一），避免页面状态分散
+- `lib/api-client.ts` 统一处理中间层：自动附加 token、401 统一处理、错误结构对齐 §4.6
+- 渲染策略：
+  - 吧主页、帖子详情：SSR 优先
+  - 登录/注册/发帖：CSR
+  - 首页：SSR 首屏 + CSR 增量
+
 ---
 
 ## 3. 数据模型（第一阶段最小表）
@@ -74,9 +82,11 @@ frontend/
 - `avatar_url` (nullable) — 第一阶段预留，前端暂不展示
 - `bio` (nullable) — 个人签名，第一阶段预留
 - `role` (default `user`) — 全局角色（`user` / `admin`），第一阶段仅区分普通用户
+- `token_version` (default 0) — JWT 版本号，用于改密/封禁后的会话失效
 - `email_verified` (default false)
 - `auth_provider` (default `local`)
 - `created_at`
+- `updated_at`
 
 ### 3.2 bars
 - `id` (pk, uuid)
@@ -88,6 +98,7 @@ frontend/
 - `status` (default `active`) — 吧状态（`active` / `archived`），第一阶段预留
 - `created_by` (fk -> users.id)
 - `created_at`
+- `updated_at`
 
 ### 3.3 bar_members
 - `id` (pk, uuid)
@@ -95,6 +106,7 @@ frontend/
 - `user_id` (fk -> users.id)
 - `role` (default `member`) — 吧内角色（`member` / `moderator` / `owner`）
 - `joined_at`
+- `updated_at`
 - unique constraint: (`bar_id`, `user_id`)
 
 > 第一阶段仅在创建吧时自动写入一条 owner 记录，不暴露加入/管理 API。该表为第二阶段吧务角色、"我的吧"、成员统计提供基础。
@@ -106,6 +118,8 @@ frontend/
 - `title`
 - `content`
 - `content_type` (default `plaintext`) — 内容格式（`plaintext` / `markdown`），第一阶段仅支持纯文本
+- `reply_count` (default 0) — 回帖数冗余计数，用于列表性能优化
+- `last_reply_at` (nullable timestamp) — 最后回复时间，用于“热门/顶帖”排序
 - `status` (default `published`) — 帖子状态（`published` / `hidden` / `deleted` / `under_review`），第一阶段仅使用 `published`
 - `deleted_at` (nullable timestamp) — 软删除标记，第一阶段预留
 - `created_at`
@@ -122,6 +136,12 @@ frontend/
 - `status` (default `published`) — 同 posts
 - `deleted_at` (nullable timestamp) — 同 posts
 - `created_at`
+- `updated_at`
+
+### 3.6 索引规划（第一阶段建议直接建立）
+- `posts(bar_id, created_at)`：吧内帖子列表查询
+- `replies(post_id, floor_number)`：帖子回复楼层查询
+- `bar_members(user_id, joined_at)`：我的吧列表查询
 
 ---
 
@@ -208,6 +228,12 @@ frontend/
 
 > 若第一阶段先行落地测试框架，最低要求为后端 e2e 主流程 + 前端 1~2 个关键组件测试，确保后续迭代可持续。
 
+## 6.3 迁移与配置基线
+- 数据库 schema 仅通过 migration 文件管理，避免使用 ORM 自动同步
+- 环境变量管理：
+  - 后端：`@nestjs/config` + `.env` + `.env.example`
+  - 前端：`NEXT_PUBLIC_*` 规范管理可公开配置
+
 ---
 
 ## 7. 第一阶段验收标准
@@ -244,40 +270,3 @@ frontend/
 - 第一阶段不实现，但帖子/回复的 `status` 字段已为审核状态机预留基础
 
 ---
-
-## 10. 二次扩展补充建议（评审补充）
-
-> 以下建议用于降低第二阶段改造成本，第一阶段可按“先约定规范、后逐步落地”的方式执行。
-
-### 10.1 数据与迁移
-- 迁移策略：禁止依赖 ORM 自动同步，统一使用 migration 文件管理 schema 版本
-- 索引规划（第一阶段建议直接建立）：
-  - `posts(bar_id, created_at)`
-  - `replies(post_id, floor_number)`
-  - `bar_members(user_id, joined_at)`
-- 时间戳统一：`users`、`bars`、`replies`、`bar_members` 增加 `updated_at`
-- 帖子排序预留：`posts` 增加 `reply_count`、`last_reply_at`（支持“热门/顶帖”）
-
-### 10.2 认证与安全
-- JWT 失效机制预留：`users.token_version`（改密/封禁时递增，旧 token 失效）
-- 接口限流基线（NestJS Throttler）：
-  - 登录：按 IP + email 限流
-  - 发帖/回帖：按 user_id 限流
-
-### 10.3 API 与前端工程约定
-- API 客户端统一中间层：自动附带 token、401 统一处理、错误结构对齐 §4.6
-- 前端状态管理约定：至少统一 auth 全局状态（Context/Zustand 二选一）
-- 渲染策略建议：
-  - 吧主页、帖子详情：SSR 优先
-  - 登录/注册/发帖：CSR
-  - 首页：SSR 首屏 + CSR 增量
-- 搜索能力预留：预留 `GET /api/search?q=&type=` 路由，后续可切换全文检索方案
-
-### 10.4 运行与配置
-- 提供 `docker-compose.yml` 作为“一键启动”基线（postgres/backend/frontend）
-- 统一环境变量管理：
-  - 后端：`@nestjs/config` + `.env` + `.env.example`
-  - 前端：`NEXT_PUBLIC_*` 规范管理可公开配置
-
-### 10.5 第二阶段功能锚点
-- 通知中心数据锚点预留：`notifications(id, user_id, type, source_type, source_id, is_read, created_at)`
