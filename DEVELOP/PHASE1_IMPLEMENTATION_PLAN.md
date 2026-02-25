@@ -66,9 +66,11 @@ frontend/
 
 ### 3.1 users
 - `id` (pk)
-- `username` (unique)
+- `email` (unique)
 - `password_hash`
 - `nickname`
+- `email_verified` (default false)
+- `auth_provider` (default `local`)
 - `created_at`
 
 ### 3.2 bars
@@ -102,6 +104,18 @@ frontend/
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `GET /api/auth/me`
+
+第一阶段登录注册设计（最小落地）：
+- 仅支持邮箱注册与登录（不接入短信/用户名登录）
+- 注册参数：`email`、`password`、`nickname`
+- 登录参数：`email`、`password`
+- 密码仅存储哈希值（bcrypt/argon2）
+- 会话使用 JWT（可选 refresh token）
+- 第一阶段不做邮件发送与二次验证，仅保留 `email_verified` 字段供后续扩展
+
+后续扩展预留（非第一阶段）：
+- 邮箱验证：新增验证 token 表，支持过期与重发策略
+- 第三方登录：新增 `user_identities`（`provider` + `provider_user_id` 唯一）支持 OAuth2/OIDC 账号绑定
 
 ## 4.2 Bars
 - `GET /api/bars`
