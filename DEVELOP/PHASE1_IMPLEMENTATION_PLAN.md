@@ -130,6 +130,10 @@ frontend/
 - `GET /api/posts/:id/replies`
 - `POST /api/posts/:id/replies`（需登录）
 
+第一阶段访问策略（匿名可读）：
+- 未登录用户可访问：`GET /api/bars`、`GET /api/bars/:id`、`GET /api/posts`、`GET /api/posts/:id`、`GET /api/posts/:id/replies`
+- 登录后才可访问：`POST /api/posts`、`POST /api/posts/:id/replies`
+
 ---
 
 ## 5. 前端页面落地（可展示）
