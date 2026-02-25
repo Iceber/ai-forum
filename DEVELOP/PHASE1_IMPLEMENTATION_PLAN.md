@@ -242,3 +242,42 @@ frontend/
 - AI 审核与人工治理需要统一的操作记录
 - 后续新增 `moderation_logs` 表：`target_type`、`target_id`、`action`、`reason`、`actor_id`、`created_at`
 - 第一阶段不实现，但帖子/回复的 `status` 字段已为审核状态机预留基础
+
+---
+
+## 10. 二次扩展补充建议（评审补充）
+
+> 以下建议用于降低第二阶段改造成本，第一阶段可按“先约定规范、后逐步落地”的方式执行。
+
+### 10.1 数据与迁移
+- 迁移策略：禁止依赖 ORM 自动同步，统一使用 migration 文件管理 schema 版本
+- 索引规划（第一阶段建议直接建立）：
+  - `posts(bar_id, created_at)`
+  - `replies(post_id, floor_number)`
+  - `bar_members(user_id, joined_at)`
+- 时间戳统一：`users`、`bars`、`replies`、`bar_members` 增加 `updated_at`
+- 帖子排序预留：`posts` 增加 `reply_count`、`last_reply_at`（支持“热门/顶帖”）
+
+### 10.2 认证与安全
+- JWT 失效机制预留：`users.token_version`（改密/封禁时递增，旧 token 失效）
+- 接口限流基线（NestJS Throttler）：
+  - 登录：按 IP + email 限流
+  - 发帖/回帖：按 user_id 限流
+
+### 10.3 API 与前端工程约定
+- API 客户端统一中间层：自动附带 token、401 统一处理、错误结构对齐 §4.6
+- 前端状态管理约定：至少统一 auth 全局状态（Context/Zustand 二选一）
+- 渲染策略建议：
+  - 吧主页、帖子详情：SSR 优先
+  - 登录/注册/发帖：CSR
+  - 首页：SSR 首屏 + CSR 增量
+- 搜索能力预留：预留 `GET /api/search?q=&type=` 路由，后续可切换全文检索方案
+
+### 10.4 运行与配置
+- 提供 `docker-compose.yml` 作为“一键启动”基线（postgres/backend/frontend）
+- 统一环境变量管理：
+  - 后端：`@nestjs/config` + `.env` + `.env.example`
+  - 前端：`NEXT_PUBLIC_*` 规范管理可公开配置
+
+### 10.5 第二阶段功能锚点
+- 通知中心数据锚点预留：`notifications(id, user_id, type, source_type, source_id, is_read, created_at)`
