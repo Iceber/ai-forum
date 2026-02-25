@@ -105,25 +105,23 @@ cat backend/migrations/001_initial_schema.sql | \
 
 ## 6. 初始数据（可选）
 
-开发时可执行以下 SQL 创建测试 Bar：
-
-```sql
-INSERT INTO bars (name, description, created_at, updated_at)
-VALUES
-  ('技术讨论', '讨论编程、架构、技术趋势的地方', NOW(), NOW()),
-  ('闲聊水区', '轻松聊天，什么都可以聊', NOW(), NOW()),
-  ('问答帮助', '遇到问题？来这里提问！', NOW(), NOW());
-```
-
-执行方式：
+开发时可先通过注册 API 创建一个种子用户，再执行以下 SQL 创建测试 Bar：
 
 ```bash
+# 1. 注册种子管理员用户（获取 userId）
+curl -s -X POST http://localhost:3001/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"Admin1234!","nickname":"管理员"}' \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['data']['user']['id'])"
+# 将上面输出的 UUID 填入下面的 <USER_ID>
+
+# 2. 创建测试 Bar（需要替换 <USER_ID>）
 psql -h localhost -U aiforum -d aiforum -c "
-INSERT INTO bars (name, description, created_at, updated_at)
+INSERT INTO bars (name, description, created_by, created_at, updated_at)
 VALUES
-  ('技术讨论', '讨论编程、架构、技术趋势的地方', NOW(), NOW()),
-  ('闲聊水区', '轻松聊天，什么都可以聊', NOW(), NOW()),
-  ('问答帮助', '遇到问题？来这里提问！', NOW(), NOW());
+  ('技术讨论', '讨论编程、架构、技术趋势的地方', '<USER_ID>', NOW(), NOW()),
+  ('闲聊水区', '轻松聊天，什么都可以聊', '<USER_ID>', NOW(), NOW()),
+  ('问答帮助', '遇到问题？来这里提问！', '<USER_ID>', NOW(), NOW());
 "
 ```
 
