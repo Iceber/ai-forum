@@ -64,36 +64,63 @@ frontend/
 
 ## 3. 数据模型（第一阶段最小表）
 
+> 所有表主键统一使用 **UUID v4**，避免自增 ID 带来的枚举风险和分布式扩展问题。
+
 ### 3.1 users
-- `id` (pk)
+- `id` (pk, uuid)
 - `email` (unique)
 - `password_hash`
 - `nickname`
+- `avatar_url` (nullable) — 第一阶段预留，前端暂不展示
+- `bio` (nullable) — 个人签名，第一阶段预留
+- `role` (default `user`) — 全局角色（`user` / `admin`），第一阶段仅区分普通用户
 - `email_verified` (default false)
 - `auth_provider` (default `local`)
 - `created_at`
 
 ### 3.2 bars
-- `id` (pk)
+- `id` (pk, uuid)
 - `name` (unique)
 - `description`
+- `avatar_url` (nullable) — 吧头像，第一阶段预留
+- `rules` (nullable, text) — 吧规，第一阶段预留
+- `category` (nullable) — 吧分类，第一阶段预留
+- `status` (default `active`) — 吧状态（`active` / `archived`），第一阶段预留
 - `created_by` (fk -> users.id)
 - `created_at`
 
-### 3.3 posts
-- `id` (pk)
+### 3.3 bar_members
+- `id` (pk, uuid)
+- `bar_id` (fk -> bars.id)
+- `user_id` (fk -> users.id)
+- `role` (default `member`) — 吧内角色（`member` / `moderator` / `owner`）
+- `joined_at`
+- unique constraint: (`bar_id`, `user_id`)
+
+> 第一阶段仅在创建吧时自动写入一条 owner 记录，不暴露加入/管理 API。该表为第二阶段吧务角色、"我的吧"、成员统计提供基础。
+
+### 3.4 posts
+- `id` (pk, uuid)
 - `bar_id` (fk -> bars.id)
 - `author_id` (fk -> users.id)
 - `title`
 - `content`
+- `content_type` (default `plaintext`) — 内容格式（`plaintext` / `markdown`），第一阶段仅支持纯文本
+- `status` (default `published`) — 帖子状态（`published` / `hidden` / `deleted` / `under_review`），第一阶段仅使用 `published`
+- `deleted_at` (nullable timestamp) — 软删除标记，第一阶段预留
 - `created_at`
 - `updated_at`
 
-### 3.4 replies
-- `id` (pk)
+### 3.5 replies
+- `id` (pk, uuid)
 - `post_id` (fk -> posts.id)
 - `author_id` (fk -> users.id)
+- `parent_reply_id` (nullable fk -> replies.id) — 楼中楼父回复，第一阶段置 null（仅一级回复）
+- `floor_number` (int) — 楼层号，第一阶段自动递增分配
 - `content`
+- `content_type` (default `plaintext`) — 同 posts
+- `status` (default `published`) — 同 posts
+- `deleted_at` (nullable timestamp) — 同 posts
 - `created_at`
 
 ---
@@ -134,6 +161,29 @@ frontend/
 - 未登录用户可访问：`GET /api/bars`、`GET /api/bars/:id`、`GET /api/posts`、`GET /api/posts/:id`、`GET /api/posts/:id/replies`
 - 登录后才可访问：`POST /api/posts`、`POST /api/posts/:id/replies`
 
+## 4.5 分页策略
+
+第一阶段统一采用 **cursor-based** 分页，避免后续改动成为 breaking change：
+- 请求参数：`cursor`（可选，首次请求不传）+ `limit`（默认 20，最大 100）
+- 适用接口：`GET /api/bars`、`GET /api/posts`、`GET /api/posts/:id/replies`
+
+## 4.6 统一响应格式
+
+所有 API 响应采用统一信封结构，便于前端通用组件和错误处理：
+```json
+{
+  "data": { ... },
+  "meta": {
+    "cursor": "下一页游标",
+    "hasMore": true
+  },
+  "error": null
+}
+```
+- 列表接口：`data` 为数组，附带 `meta` 分页信息
+- 单资源接口：`data` 为对象，`meta` 可省略
+- 错误响应：`data` 为 null，`error` 包含 `code` + `message`
+
 ---
 
 ## 5. 前端页面落地（可展示）
@@ -173,8 +223,22 @@ frontend/
 
 ## 8. 第二阶段衔接点（预留，不在本阶段实现）
 
-- 回复二级楼层与引用
-- 吧务角色与管理操作
+- 回复二级楼层与引用（`parent_reply_id` 已预留）
+- 吧务角色与管理操作（`bar_members` 表已预留）
 - 收藏、点赞、通知中心
 - 接入 AI 能力（相关帖推荐、审核提示、摘要）
 - 对象存储媒体上传（S3/MinIO）
+- 内容格式扩展：Markdown / 富文本渲染（`content_type` 已预留）
+- 内容治理：帖子/回复审核队列与软删除流程（`status` + `deleted_at` 已预留）
+
+## 9. AI 能力预埋方向（不在第一阶段实现，仅记录设计方向）
+
+### 9.1 内容向量化
+- AI 重复帖检测与相关帖推荐依赖内容 embedding
+- 后续可在 posts 表新增 `embedding vector(1536)` 列（PG pgvector 扩展），或独立 `post_embeddings` 表
+- 第一阶段 ORM entity 设计时保持扩展空间，不封死字段列表
+
+### 9.2 审核日志
+- AI 审核与人工治理需要统一的操作记录
+- 后续新增 `moderation_logs` 表：`target_type`、`target_id`、`action`、`reason`、`actor_id`、`created_at`
+- 第一阶段不实现，但帖子/回复的 `status` 字段已为审核状态机预留基础
