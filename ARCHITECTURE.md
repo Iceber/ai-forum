@@ -25,18 +25,19 @@
 
 ### 2.2 后端语言
 
-**选择：TypeScript（Node.js）**
+**选择：TypeScript（Node.js，主选）+ Golang（备选）**
 
 原因：
 - 与前端统一语言栈，降低协作和上下文切换成本
 - 适合快速迭代社区产品（权限、内容、通知、审核流程）
 - 对 AI 服务接入（HTTP API / SDK）友好
+- Golang 可作为后续高并发阶段备选（更低资源占用、更稳定的并发性能）
 
 ---
 
 ### 2.3 后端框架
 
-**选择：NestJS**
+**选择：NestJS（主选） / Gin（Golang 备选）**
 
 原因：
 - 模块化结构清晰，适合按领域拆分（Bars、Posts、Replies、Accounts、Moderation）
