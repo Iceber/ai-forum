@@ -72,7 +72,7 @@
 - 被拒绝的记录保留可查阅，不可删除。
 
 ### 3.3 个人资料编辑安全边界
-- 头像上传使用预签名上传链路（预签名上传的完整实现在 PRE_PHASE3）。
+- 头像上传（预签名上传链路）整体移入 PRE_PHASE3；第二阶段仅支持用户直接填写头像 URL，不对接任何上传服务。
 - 个人签名限长 200 字符。
 
 ### 3.4 管理员身份判定
@@ -126,6 +126,7 @@
 
 临时封禁吧（`suspended`）到期后的解封采用**延迟求值（Lazy Evaluation）**策略：
 
+- **适用范围**：任何需要读取或依赖吧状态的操作（包括 `GET /api/bars`、`GET /api/bars/:id`、`POST /api/bars/:id/join`、`POST /api/bars/:id/leave` 以及所有管理员接口），在执行业务逻辑前均应先执行到期检查并在同一事务内完成自动解封，确保状态读取的一致性。
 - 每次访问吧详情（`GET /api/bars/:id`）时，若吧状态为 `suspended` 且 `suspend_until ≤ NOW()`，服务端在同一事务内将其状态更新为 `active` 后再返回结果（事务确保并发读取时不产生重复解封写入）。
 - 吧列表（`GET /api/bars`）查询时同样执行此检查，确保 `active` 过滤的准确性。
 - 无需额外定时任务，第二阶段实现成本低。
@@ -203,7 +204,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 -- 第一阶段已建 bar_members(user_id, joined_at)，确认存在即可
 ```
 
-> `member_count` 字段在加入吧（`JOIN`）时 +1，退出吧（`LEAVE`）时 -1，由 Service 层在同一事务内维护，使吧列表可直接读取成员数而无需额外 COUNT 查询（避免批量展示时的聚合开销）。后续如需高精度一致性，可改为数据库触发器实现。
+> `member_count` 字段在加入吧（`JOIN`）时 +1，退出吧（`LEAVE`）时 -1，由 Service 层在同一事务内维护，使吧列表可直接读取成员数而无需额外 COUNT 查询（避免批量展示时的聚合开销）。**注意**：吧创建时，Service 层在同一事务内插入创建者的 `bar_members`（`role = 'owner'`）记录并同时将 `member_count` 初始化为 `1`；若遗漏此步骤，新吧的成员数将显示为 `0`（与 `DEFAULT 0` 冲突）。后续如需高精度一致性，可改为数据库触发器实现。
 
 ---
 
@@ -334,7 +335,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 { "reason": "永久封禁原因" }
 ```
 将吧状态变更为 `permanently_banned`，记录审计日志。
-失败响应：`400` 未提供原因；`404` 吧不存在；`409` 吧当前状态不允许此操作。
+失败响应：`400` 未提供原因；`404` 吧不存在；`409` 吧当前状态不允许此操作（非 `active` 或 `suspended`）。
 
 #### `POST /api/admin/bars/:id/close` — 关闭吧
 
@@ -343,7 +344,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 { "reason": "关闭原因" }
 ```
 将吧状态变更为 `closed`，记录审计日志。
-失败响应：`400` 未提供原因；`404` 吧不存在；`409` 吧当前状态不允许此操作。
+失败响应：`400` 未提供原因；`404` 吧不存在；`409` 吧当前状态不允许此操作（非 `active` 或 `suspended`）。
 
 #### 管理员接口公共校验说明
 
@@ -722,8 +723,16 @@ admin/bars       │
    ┌────┴────┐
   200         409
    │           │
-吧恢复 active  提示"吧当前状态不允许解封"
-列表刷新
+吧恢复 active  重新 GET 吧详情，判断当前状态
+列表刷新       │
+          ┌───┴───┐
+        active   其他状态
+          │         │
+   提示"该吧封禁已  提示"当前吧状态
+   自动到期，无需   不支持该操作，
+   手动解封，请     请刷新后重试"
+   刷新查看最新
+   状态"
 ```
 
 **查看审计日志**：
