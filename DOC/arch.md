@@ -106,8 +106,7 @@ ai-forum/
 ├── docker-compose.yml        # Docker 一键编排（postgres + backend + frontend）
 ├── DOC/                      # 项目文档目录
 │   ├── arch.md               # 本文档：架构与 API 接口
-│   ├── usage.md              # 功能与用户使用链路
-│   └── PHASE1_FEATURES_AND_APIS.md  # 第一阶段功能与接口（历史参考）
+│   └── usage.md              # 功能与用户使用链路
 ├── DEVELOP/                  # 开发规划文档
 │   ├── PHASE1_IMPLEMENTATION_PLAN.md  # 第一阶段实现计划
 │   └── TODO.md               # 未纳入阶段一的待办
