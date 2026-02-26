@@ -1,17 +1,21 @@
 import type { ApiResponse } from '@/types';
 
-const FALLBACK_API_URL = process.env.API_DEFAULT_URL ?? 'http://localhost:3001';
+const DEFAULT_API_URL = process.env.API_DEFAULT_URL ?? 'http://localhost:3001';
 
 // Environment variables are read at module load; base list is static for the runtime.
-const API_BASES = Array.from(
-  new Set(
-    [
-      process.env.API_INTERNAL_URL,
-      process.env.NEXT_PUBLIC_API_URL,
-      FALLBACK_API_URL,
-    ].filter(Boolean),
-  ),
-);
+const API_BASES_RAW = [
+  process.env.API_INTERNAL_URL,
+  process.env.NEXT_PUBLIC_API_URL,
+  DEFAULT_API_URL,
+].filter(Boolean);
+const API_BASES = Array.from(new Set(API_BASES_RAW));
+
+if (
+  process.env.NODE_ENV !== 'production' &&
+  API_BASES.length < API_BASES_RAW.length
+) {
+  console.warn('Duplicate API base URLs detected; fallback list was deduplicated.');
+}
 
 /**
  * Server-side API fetch with base URL fallback.
