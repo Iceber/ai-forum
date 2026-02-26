@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { InternalServerErrorException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RepliesService } from './replies.service';
@@ -82,6 +83,28 @@ describe('RepliesService', () => {
         'post-uuid-1',
         createdAt,
       );
+    });
+
+    it('should throw InternalServerErrorException when created reply cannot be loaded', async () => {
+      const savedReply = {
+        id: 'reply-uuid-1',
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      };
+      const qb = {
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ maxFloor: 0 }),
+      };
+
+      postsService.findOne.mockResolvedValue({ id: 'post-uuid-1' } as any);
+      repo.createQueryBuilder.mockReturnValue(qb as any);
+      repo.create.mockReturnValue(savedReply as any);
+      repo.save.mockResolvedValue(savedReply as any);
+      repo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.create('post-uuid-1', { content: 'hello' }, 'user-uuid-1'),
+      ).rejects.toThrow(InternalServerErrorException);
     });
   });
 });
