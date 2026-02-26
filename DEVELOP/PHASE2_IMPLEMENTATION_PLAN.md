@@ -181,7 +181,7 @@ ALTER TABLE bars ALTER COLUMN status SET DEFAULT 'pending_review';
 | `metadata` | JSONB | NULL | 额外信息（如封禁时长） |
 | `created_at` | TIMESTAMPTZ | DEFAULT NOW() | 操作时间 |
 
-**`action` 枚举值**：`approve_bar`、`reject_bar`、`suspend_bar`、`unsuspend_bar`、`ban_bar`、`close_bar`。
+**`action` 枚举值**：`approve`、`reject`、`suspend`、`unsuspend`、`ban`、`close`。
 
 > PRE_PHASE3 中将扩展 `target_type` 支持 `post` / `reply`，并新增 `hide_post`、`hide_reply` 等操作类型。
 
@@ -190,8 +190,8 @@ ALTER TABLE bars ALTER COLUMN status SET DEFAULT 'pending_review';
 ### 4.3 索引补充
 
 ```sql
--- 吧列表查询（仅展示 active 状态）
-CREATE INDEX idx_bars_status_created_at ON bars (status, created_at);
+-- 吧列表查询（仅展示 active 状态，按 member_count 倒序）
+CREATE INDEX idx_bars_status_member_count ON bars (status, member_count DESC, created_at DESC);
 -- 用户创建的吧查询
 CREATE INDEX idx_bars_created_by ON bars (created_by, created_at);
 -- 用户帖子查询（个人中心）
@@ -233,13 +233,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 - **第二阶段变更**：仅返回 `status = 'active'` 的吧（之前无此过滤约束）。
 - 执行查询前，对 `suspended` 且已到期的吧自动解封（见 §3.7）。
 - 每条吧记录响应新增 `memberCount`；已登录用户新增 `isMember` 字段。
+- 默认按成员数（`memberCount`）倒序排列，成员数相同时按创建时间倒序。
 - 分页参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
 
 #### `GET /api/bars/:id` — 获取吧详情（第二阶段变更）
 
 - `pending_review` 和 `rejected` 状态的吧仅创建者本人可访问；非创建者请求时返回 `404 Not Found`（对外不暴露这两种状态的存在）。
 - `suspended`、`permanently_banned`、`closed` 状态的吧对所有人可访问（已加入的成员需能查看历史内容），不返回 `404`。
-- 若吧为临时封禁且已到期，服务端自动解封后再返回。
+- 若吧为临时封禁且已到期，服务端自动解封后再返回（见 §3.7）。
 - 响应新增字段：`memberCount`、`isMember`、`memberRole`、`suspendUntil`、`statusReason`（见 §3.5）。
 
 #### `POST /api/bars` — 提交创建吧申请
@@ -404,14 +405,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 
 #### `GET /api/users/me/bars` — 我加入的吧列表
 
-按加入时间倒序返回当前用户已加入的吧，支持 cursor 分页。
+按加入时间倒序返回当前用户已加入的吧，支持 cursor 分页。执行查询前，对 `suspended` 且已到期的吧自动解封（见 §3.7），确保返回的 `status` 字段反映最新状态。
 
 查询参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
 响应字段：每条吧包含 `id`、`name`、`description`、`status`、`memberCount`、`joinedAt` 等基本信息。含所有状态的吧（包括 `suspended`、`permanently_banned`、`closed`），附带状态标识。
 
 #### `GET /api/users/me/created-bars` — 我创建的吧列表
 
-按创建时间倒序返回当前用户创建的吧，支持 cursor 分页。包含所有状态的吧（`pending_review`、`active`、`rejected`、`suspended`、`permanently_banned`、`closed`）。
+按创建时间倒序返回当前用户创建的吧，支持 cursor 分页。执行查询前，对 `suspended` 且已到期的吧自动解封（见 §3.7），确保返回的 `status` 字段反映最新状态。包含所有状态的吧（`pending_review`、`active`、`rejected`、`suspended`、`permanently_banned`、`closed`）。
 
 查询参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
 响应字段：每条吧包含 `id`、`name`、`status`、`rejectReason`（被拒绝时有值）、`createdAt` 等基本信息。
@@ -429,6 +430,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 |------|------|------|------|
 | nickname | string | 否 | 2-50 字符 |
 | bio | string | 否 | 最长 200 字符 |
+
+成功响应（200）：返回更新后的用户资料对象。
+失败响应：`400` 字段校验失败（如昵称过短/过长、签名超长）。
 
 ---
 
