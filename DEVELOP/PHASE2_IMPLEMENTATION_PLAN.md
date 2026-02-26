@@ -376,6 +376,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 - 所有针对特定吧（`:id`）的管理员接口在执行业务逻辑前须先执行封禁到期自动解封检查（参见 §3.7），确保操作基于最新状态。`GET /api/admin/bars` 列表端点无需执行此检查——列表仅展示当前 DB 状态，到期吧会在下次被单独访问或操作时自动解封。
 - 状态迁移不合法时（参见 §3.6）返回 `409 Conflict`，错误体：`{ "error": { "code": "INVALID_STATE_TRANSITION", "message": "..." } }`。
 - `reject`、`suspend`、`ban`、`close` 操作中的 `reason` 字段写入 `bars.status_reason`，`approve` 和 `unsuspend` 时清空该字段。
+- 当吧从 `suspended` 状态迁移至其他状态时（`unsuspend`/`ban`/`close` 及 §3.7 Lazy Eval 自动解封），同时清空 `suspend_until`，确保满足 §4.1 的字段约束（该字段仅 `suspended` 状态时有值）。
 - 所有操作记录到 `admin_actions` 审计表，`admin_id` 取当前登录用户 ID。
 
 ### 5.3 个人中心接口
