@@ -1,0 +1,265 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-unit-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+
+      - name: Run unit tests
+        working-directory: backend
+        run: npm test
+
+  image-build:
+    runs-on: ubuntu-latest
+    needs: backend-unit-test
+    strategy:
+      matrix:
+        service: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.service }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}
+          push: false
+
+  backend-e2e:
+    runs-on: ubuntu-latest
+    needs: backend-unit-test
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: ai_forum
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ai_forum"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Apply database migration
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d ai_forum -f backend/migrations/001_initial_schema.sql
+
+      - name: Seed database for E2E tests
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d ai_forum <<'SQL'
+          INSERT INTO users (id, email, password_hash, nickname)
+          VALUES ('00000000-0000-4000-a000-000000000010', 'e2e-seed@example.com', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8x6/0D9QmX8JY9Vn0kGugHgd6Nq35a', 'seed-user')
+          ON CONFLICT (email) DO NOTHING;
+
+          INSERT INTO bars (id, name, description, created_by)
+          VALUES (
+            '00000000-0000-4000-a000-000000000001',
+            'e2e-test-bar',
+            'Bar for backend e2e tests',
+            '00000000-0000-4000-a000-000000000010'
+          )
+          ON CONFLICT (name) DO NOTHING;
+          SQL
+
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+
+      - name: Start backend
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ai_forum
+          JWT_SECRET: test-jwt-secret-32-characters-minimum
+          JWT_EXPIRES_IN: 7d
+          PORT: 3001
+          NODE_ENV: test
+        run: |
+          npm run start:prod >/tmp/backend.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://localhost:3001/api/bars >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/backend.log
+          exit 1
+
+      - name: Backend E2E smoke checks
+        working-directory: backend
+        env:
+          API_URL: http://localhost:3001/api
+          TEST_BAR_ID: 00000000-0000-4000-a000-000000000001
+          JWT_SECRET: test-jwt-secret-32-characters-minimum
+        run: |
+          EMAIL="backend-e2e-$(date +%s)@example.com"
+          REGISTER_RESPONSE=$(curl -sS -X POST "$API_URL/auth/register" \
+            -H "Content-Type: application/json" \
+            -d "{\"email\":\"$EMAIL\",\"password\":\"Password123!\",\"nickname\":\"BackendE2E\"}" \
+            -w $'\n%{http_code}')
+          REGISTER_STATUS=$(echo "$REGISTER_RESPONSE" | tail -n1)
+          REGISTER_BODY=$(echo "$REGISTER_RESPONSE" | sed '$d')
+          if [ "$REGISTER_STATUS" = "201" ]; then
+            TOKEN=$(echo "$REGISTER_BODY" | jq -r '.data.accessToken')
+          else
+            echo "Register failed with status $REGISTER_STATUS"
+            echo "$REGISTER_BODY"
+            echo "Falling back to seeded e2e user auth (id: 00000000-0000-4000-a000-000000000010, email: e2e-seed@example.com)"
+            TOKEN=$(python -c "import base64,hashlib,hmac,json,os;b64=lambda b:base64.urlsafe_b64encode(b).rstrip(b'=').decode();h=b64(json.dumps({'alg':'HS256','typ':'JWT'},separators=(',',':')).encode());p=b64(json.dumps({'sub':'00000000-0000-4000-a000-000000000010','email':'e2e-seed@example.com','tokenVersion':0},separators=(',',':')).encode());s=b64(hmac.new(os.environ['JWT_SECRET'].encode(),f'{h}.{p}'.encode(),hashlib.sha256).digest());print(f'{h}.{p}.{s}')")
+          fi
+          POST_RESPONSE=$(curl -sS -X POST "$API_URL/posts" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d "{\"barId\":\"$TEST_BAR_ID\",\"title\":\"Backend E2E Post\",\"content\":\"Backend E2E Content\",\"contentType\":\"plaintext\"}" \
+            -w $'\n%{http_code}')
+          POST_STATUS=$(echo "$POST_RESPONSE" | tail -n1)
+          POST_BODY=$(echo "$POST_RESPONSE" | sed '$d')
+          [ "$POST_STATUS" = "201" ] || { echo "Create post failed with status $POST_STATUS"; echo "$POST_BODY"; exit 1; }
+          POST_ID=$(echo "$POST_BODY" | jq -r '.data.id')
+          REPLY_RESPONSE=$(curl -sS -X POST "$API_URL/posts/$POST_ID/replies" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"content":"Backend E2E Reply","contentType":"plaintext"}' \
+            -w $'\n%{http_code}')
+          REPLY_STATUS=$(echo "$REPLY_RESPONSE" | tail -n1)
+          REPLY_BODY=$(echo "$REPLY_RESPONSE" | sed '$d')
+          [ "$REPLY_STATUS" = "201" ] || { echo "Create reply failed with status $REPLY_STATUS"; echo "$REPLY_BODY"; exit 1; }
+
+  frontend-e2e:
+    runs-on: ubuntu-latest
+    needs: image-build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start containers
+        run: docker compose up -d --build
+
+      - name: Wait for postgres
+        run: |
+          for i in {1..30}; do
+            if docker compose exec -T postgres pg_isready -U aiforum -d aiforum >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs postgres
+          exit 1
+
+      - name: Apply migration and seed data
+        run: |
+          cat backend/migrations/001_initial_schema.sql | docker compose exec -T postgres psql -U aiforum -d aiforum
+          docker compose exec -T postgres psql -U aiforum -d aiforum <<'SQL'
+          INSERT INTO users (id, email, password_hash, nickname)
+          VALUES ('00000000-0000-4000-a000-000000000020', 'frontend-seed@example.com', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8x6/0D9QmX8JY9Vn0kGugHgd6Nq35a', 'frontend-seed-user')
+          ON CONFLICT (email) DO NOTHING;
+
+          INSERT INTO bars (id, name, description, created_by)
+          VALUES (
+            '00000000-0000-4000-a000-000000000011',
+            'frontend-e2e-bar',
+            'Bar for frontend e2e tests',
+            '00000000-0000-4000-a000-000000000020'
+          )
+          ON CONFLICT (name) DO NOTHING;
+          SQL
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:3001/api/bars >/dev/null && curl -fsS http://localhost:3000 >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Services did not become ready in time"
+          docker compose logs
+          exit 1
+
+      - name: Frontend E2E smoke checks
+        run: |
+          curl -fsS http://localhost:3000 >/dev/null
+          curl -fsS http://localhost:3000/login >/dev/null
+          curl -fsS http://localhost:3000/register >/dev/null
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down -v
+
+  publish-images:
+    runs-on: ubuntu-latest
+    needs: [backend-unit-test, image-build, backend-e2e, frontend-e2e]
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_name == 'main')
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image owner
+        id: image
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}
+          push: true
+          tags: |
+            ghcr.io/${{ steps.image.outputs.owner }}/ai-forum-${{ matrix.service }}:sha-${{ github.sha }}
+            ghcr.io/${{ steps.image.outputs.owner }}/ai-forum-${{ matrix.service }}:latest
