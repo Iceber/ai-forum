@@ -53,16 +53,16 @@
 
 ### 3.1 吧状态对用户行为的影响
 
-| 吧状态 | 浏览内容 | 发帖/回复 | 加入/退出 | 在公开列表可见 |
-|--------|---------|----------|----------|--------------|
-| `active` | ✅ | ✅ | ✅ | ✅ |
-| `pending_review` | ❌（仅创建者可见） | ❌ | ❌ | ❌ |
-| `rejected` | ❌（仅创建者可见状态） | ❌ | ❌ | ❌ |
-| `suspended` | ✅（只读） | ❌ | ❌ | ❌（从列表移除） |
-| `permanently_banned` | ✅（只读） | ❌ | ❌ | ❌ |
-| `closed` | ✅（只读） | ❌ | ❌ | ❌ |
+| 吧状态 | 浏览内容 | 发帖/回复 | 加入 | 退出 | 在公开列表可见 |
+|--------|---------|----------|------|------|--------------|
+| `active` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `pending_review` | ❌（仅创建者可见） | ❌ | ❌ | ❌ | ❌ |
+| `rejected` | ❌（仅创建者可见状态） | ❌ | ❌ | ❌ | ❌ |
+| `suspended` | ✅（只读） | ❌ | ✅ | ✅ | ❌（从列表移除） |
+| `permanently_banned` | ✅（只读） | ❌ | ❌ | ❌ | ❌ |
+| `closed` | ✅（只读） | ❌ | ❌ | ❌ | ❌ |
 
-- 已加入被封禁/关闭吧的用户，在"我的吧"列表中仍可看到该吧（附带状态标识），可进入查看历史内容。
+- 已加入 `suspended` 吧的用户可继续加入或退出；已加入 `permanently_banned` 或 `closed` 吧的用户不可再加入或退出，但仍可在"我的吧"列表中看到该吧（附带状态标识）并进入查看历史内容。
 - 被封禁/关闭的吧详情页顶部展示醒目的状态提示（如"该吧已被封禁"）。
 - 在被封禁/关闭的吧内，发帖和回复按钮禁用并展示提示。
 
@@ -100,7 +100,7 @@
 | `isMember` | boolean \| null | 已登录时返回是否已加入，未登录返回 `null` |
 | `memberRole` | string \| null | 已加入时返回角色（`member` / `moderator` / `owner`），否则 `null` |
 | `suspendUntil` | ISO8601 \| null | 临时封禁时返回到期时间，其他状态为 `null` |
-| `suspendReason` | string \| null | 封禁原因，非封禁状态为 `null` |
+| `statusReason` | string \| null | 封禁/关闭原因（`suspended`/`permanently_banned`/`closed` 时有值），其他状态为 `null` |
 
 > 非 `active` 状态的吧详情页仍可通过 `GET /api/bars/:id` 访问（已加入成员需能查看历史内容），但吧列表（`GET /api/bars`）不展示这些吧。
 
@@ -131,6 +131,8 @@
 - 无需额外定时任务，第二阶段实现成本低。
 - 后续可在工程质量迭代中引入定时任务（`@nestjs/schedule`）批量处理到期封禁，两种策略可并存。
 
+> **边界说明**：若封禁已通过 Lazy Evaluation 自动到期解封（吧状态已变为 `active`），此时管理员手动调用 `POST /api/admin/bars/:id/unsuspend` 会返回 `409 INVALID_STATE_TRANSITION`（当前状态非 `suspended`）。这是预期行为，前端应将此 `409` 提示为"该吧封禁已自动到期，无需手动解封，请刷新查看最新状态"，避免误导管理员认为操作失败。
+
 ---
 
 ## 4. 数据库表修改
@@ -153,7 +155,7 @@ ALTER TABLE bars ALTER COLUMN status SET DEFAULT 'pending_review';
 | `reject_reason` | TEXT | NULL | 审核拒绝原因 |
 | `reviewed_by` | UUID | FK → users.id, NULL | 审核人 |
 | `reviewed_at` | TIMESTAMPTZ | NULL | 审核时间 |
-| `suspend_reason` | TEXT | NULL | 封禁原因 |
+| `status_reason` | TEXT | NULL | 封禁/关闭原因（适用于 `suspended`、`permanently_banned`、`closed` 状态） |
 | `suspend_until` | TIMESTAMPTZ | NULL | 临时封禁到期时间（null 表示永久封禁或非封禁状态） |
 | `member_count` | INTEGER | DEFAULT 0, NOT NULL | 成员数冗余计数，加入/退出时由服务层维护 |
 
@@ -226,9 +228,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 
 #### `GET /api/bars/:id` — 获取吧详情（第二阶段变更）
 
-- 非 `active` 状态的吧仍可通过该接口访问（已加入的成员需能查看历史内容），不返回 `404`。
+- `pending_review` 和 `rejected` 状态的吧仅创建者本人可访问；非创建者请求时返回 `404 Not Found`（对外不暴露这两种状态的存在）。
+- `suspended`、`permanently_banned`、`closed` 状态的吧对所有人可访问（已加入的成员需能查看历史内容），不返回 `404`。
 - 若吧为临时封禁且已到期，服务端自动解封后再返回。
-- 响应新增字段：`memberCount`、`isMember`、`memberRole`、`suspendUntil`、`suspendReason`（见 §3.5）。
+- 响应新增字段：`memberCount`、`isMember`、`memberRole`、`suspendUntil`、`statusReason`（见 §3.5）。
 
 #### `POST /api/bars` — 提交创建吧申请
 
@@ -254,22 +257,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 
 #### `POST /api/bars/:id/join` — 加入吧
 
-前置校验：吧状态必须为 `active`；用户未加入过该吧。
+前置校验：吧状态必须为 `active` 或 `suspended`；用户未加入过该吧。
 成功响应（201）：返回新建的成员记录。
 失败响应：`404` 吧不存在；`409` 已是成员或吧状态不允许加入（错误码 `BAR_NOT_JOINABLE`）。
 
 #### `POST /api/bars/:id/leave` — 退出吧
 
-前置校验：用户已加入该吧；吧主不可退出（需先转让吧主）。
+前置校验：用户已加入该吧；吧主不可退出（需先转让吧主）；吧状态为 `active` 或 `suspended`（`permanently_banned`/`closed` 状态的吧不允许退出）。
 成功响应（200）：返回操作结果。
-失败响应：`404` 吧不存在或用户未加入；`403` 吧主不可退出。
+失败响应：`404` 吧不存在或用户未加入；`403` 吧主不可退出；`409` 吧状态不允许退出（错误码 `BAR_NOT_LEAVABLE`）。
 
 ### 5.2 管理员接口
 
 | 方法 | 路径 | 认证 | 说明 |
 |------|------|------|------|
 | GET | `/api/admin/bars` | 是（admin） | 全量吧列表（支持按状态过滤，cursor 分页） |
-| GET | `/api/admin/bars/pending` | 是（admin） | 待审核吧列表（cursor 分页） |
 | POST | `/api/admin/bars/:id/approve` | 是（admin） | 审核通过吧 |
 | POST | `/api/admin/bars/:id/reject` | 是（admin） | 审核拒绝吧 |
 | POST | `/api/admin/bars/:id/suspend` | 是（admin） | 临时封禁吧 |
@@ -280,19 +282,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 
 #### `GET /api/admin/bars` — 全量吧列表
 
-用于管理员后台"吧管理"页面（`/admin/bars`），支持按状态过滤和分页。
+用于管理员后台"吧管理"页面（`/admin/bars`），支持按状态过滤和分页。待审核吧列表使用 `?status=pending_review` 参数过滤即可，无需单独端点。
 
 查询参数：
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `status` | string | 可选，按状态过滤（不传则返回所有状态） |
+| `status` | string | 可选，按状态过滤（不传则返回所有状态）。待审核列表使用 `pending_review` |
 | `cursor` | string | 分页游标 |
 | `limit` | integer | 每页条数，默认 20，最大 100 |
-
-#### `GET /api/admin/bars/pending` — 待审核吧列表
-
-分页参数：`cursor`（可选）、`limit`（默认 20，最大 100）。响应每条记录包含吧基础信息和创建者信息。
 
 #### `POST /api/admin/bars/:id/approve` — 审核通过
 
@@ -324,7 +322,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 
 #### `POST /api/admin/bars/:id/unsuspend` — 解封吧
 
-将吧状态从 `suspended` 恢复为 `active`，清空 `suspend_reason` 和 `suspend_until`，记录审计日志。
+将吧状态从 `suspended` 恢复为 `active`，清空 `status_reason` 和 `suspend_until`，记录审计日志。
 失败响应：`404` 吧不存在；`409` 吧当前状态非 `suspended`。
 
 #### `POST /api/admin/bars/:id/ban` — 永久封禁
@@ -349,6 +347,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 
 - 所有管理员接口在执行前先验证目标吧是否存在，不存在则返回 `404 Not Found`。
 - 状态迁移不合法时（参见 §3.6）返回 `409 Conflict`，错误体：`{ "error": { "code": "INVALID_STATE_TRANSITION", "message": "..." } }`。
+- `suspend`、`ban`、`close` 操作中的 `reason` 字段写入 `bars.status_reason`，`unsuspend` 时清空该字段。
 - 所有操作记录到 `admin_actions` 审计表，`admin_id` 取当前登录用户 ID。
 
 ### 5.3 个人中心接口
@@ -386,7 +385,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 | 页面 | 路由 | 渲染方式 | 说明 |
 |------|------|---------|------|
 | 创建吧 | `/create-bar` | CSR（需登录） | 吧创建申请表单 |
-| 个人中心 | `/profile` | CSR（需登录） | 个人中心首页（我的帖子/回复/吧） |
+| 个人中心 | `/profile` | CSR（需登录） | 个人中心首页（我的帖子，默认页签） |
+| 我的回复 | `/profile/replies` | CSR（需登录） | 我的回复列表（cursor 分页） |
+| 我的吧 | `/profile/bars` | CSR（需登录） | 已加入吧列表（cursor 分页） |
 | 个人资料编辑 | `/profile/edit` | CSR（需登录） | 编辑昵称、头像、签名 |
 | 我创建的吧 | `/profile/created-bars` | CSR（需登录） | 查看创建的吧及审核状态 |
 | 管理员后台 | `/admin` | CSR（需 admin） | 管理员仪表盘入口 |
@@ -609,7 +610,8 @@ admin/bars       │
 **细节说明**：
 - 退出操作需要确认弹窗防误操作。
 - 吧主的"退出吧"按钮仍展示，但点击后提示转让说明（吧主转让在 PRE_PHASE3 实现）。
-- 已加入被封禁/关闭吧的用户，退出吧按钮仍展示（允许退出只读状态的吧）。
+- `suspended` 状态的吧：加入和退出按钮均正常展示可操作。
+- `permanently_banned` 或 `closed` 状态的吧：加入和退出按钮均禁用，已加入的成员仅可浏览历史内容。
 
 ---
 
