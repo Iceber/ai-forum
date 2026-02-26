@@ -2,7 +2,7 @@
 -- Seed data for E2E tests. Applied after migrations/001_initial_schema.sql.
 -- All UUIDs use RFC 4122 v4 format (version=4, variant=a) for class-validator compatibility.
 
--- Backend E2E seed user
+-- Backend E2E seed user (password: Password123!)
 INSERT INTO users (id, email, password_hash, nickname)
 VALUES (
   '00000000-0000-4000-a000-000000000010',
@@ -20,7 +20,7 @@ VALUES (
   '00000000-0000-4000-a000-000000000010'
 ) ON CONFLICT (name) DO NOTHING;
 
--- Frontend E2E seed user
+-- Frontend E2E seed user (password: Password123!)
 INSERT INTO users (id, email, password_hash, nickname)
 VALUES (
   '00000000-0000-4000-a000-000000000020',

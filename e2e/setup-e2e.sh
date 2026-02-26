@@ -33,12 +33,12 @@ for i in $(seq 1 30); do
     echo "PostgreSQL is ready."
     break
   fi
+  sleep 2
   if [ "$i" = "30" ]; then
     echo "ERROR: PostgreSQL did not become ready in 60s"
     docker compose logs postgres
     exit 1
   fi
-  sleep 2
 done
 
 # ─── 3. Apply migration ─────────────────────────────────────────────
@@ -59,12 +59,12 @@ for i in $(seq 1 30); do
     echo "All services are ready."
     break
   fi
+  sleep 2
   if [ "$i" = "30" ]; then
     echo "ERROR: Services did not become ready in 60s"
     docker compose logs
     exit 1
   fi
-  sleep 2
 done
 
 echo ""
