@@ -1,6 +1,6 @@
 import type { ApiResponse } from '@/types';
 
-const DEFAULT_API_URL = 'http://localhost:3001';
+const DEFAULT_API_URL = process.env.API_DEFAULT_URL ?? 'http://localhost:3001';
 
 const API_BASES = Array.from(
   new Set(
@@ -37,6 +37,7 @@ export async function fetchApi<T>(path: string): Promise<ApiResponse<T> | null> 
         if (process.env.NODE_ENV !== 'production') {
           console.warn(`Server API JSON parse failed: ${base}${path}`, error);
         }
+        continue;
       }
     } catch (error) {
       if (process.env.NODE_ENV !== 'production') {
