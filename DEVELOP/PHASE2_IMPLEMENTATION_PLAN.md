@@ -100,7 +100,7 @@
 | `isMember` | boolean \| null | 已登录时返回是否已加入，未登录返回 `null` |
 | `memberRole` | string \| null | 已加入时返回角色（`member` / `owner`），否则 `null`。`moderator` 角色在 PRE_PHASE3 启用，第二阶段仅有 `member` 和 `owner` |
 | `suspendUntil` | ISO8601 \| null | 临时封禁时返回到期时间，其他状态为 `null` |
-| `statusReason` | string \| null | 封禁/关闭原因（`suspended`/`permanently_banned`/`closed` 时有值），其他状态为 `null` |
+| `statusReason` | string \| null | 状态变更原因（`rejected`/`suspended`/`permanently_banned`/`closed` 时有值），其他状态为 `null` |
 
 > 非 `active` 状态的吧详情页仍可通过 `GET /api/bars/:id` 访问（已加入成员需能查看历史内容），但吧列表（`GET /api/bars`）不展示这些吧。
 
@@ -161,10 +161,9 @@ ALTER TABLE bars ALTER COLUMN status SET DEFAULT 'pending_review';
 
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
-| `reject_reason` | TEXT | NULL | 审核拒绝原因 |
 | `reviewed_by` | UUID | FK → users.id, NULL | 审核人 |
 | `reviewed_at` | TIMESTAMPTZ | NULL | 审核时间 |
-| `status_reason` | TEXT | NULL | 封禁/关闭原因（适用于 `suspended`、`permanently_banned`、`closed` 状态） |
+| `status_reason` | TEXT | NULL | 状态变更原因（适用于 `rejected`、`suspended`、`permanently_banned`、`closed` 状态，状态变更时根据情况更新） |
 | `suspend_until` | TIMESTAMPTZ | NULL | 临时封禁到期时间（仅 `suspended` 状态时有值，其他状态为 `null`） |
 | `member_count` | INTEGER | DEFAULT 0, NOT NULL | 成员数冗余计数，加入/退出时由服务层维护 |
 
@@ -316,7 +315,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 ```json
 { "reason": "拒绝原因说明" }
 ```
-将吧状态变更为 `rejected`，记录拒绝原因和审计日志。
+将吧状态变更为 `rejected`，拒绝原因写入 `bars.status_reason`，记录审计日志。
 失败响应：`400` 未提供拒绝原因；`404` 吧不存在；`409` 吧当前状态不允许此操作（非 `pending_review`）。
 
 #### `POST /api/admin/bars/:id/suspend` — 临时封禁
@@ -376,7 +375,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 - 所有针对特定吧（`:id`）的管理员接口在执行前先验证目标吧是否存在，不存在则返回 `404 Not Found`。
 - 所有针对特定吧（`:id`）的管理员接口在执行业务逻辑前须先执行封禁到期自动解封检查（参见 §3.7），确保操作基于最新状态。`GET /api/admin/bars` 列表端点无需执行此检查——列表仅展示当前 DB 状态，到期吧会在下次被单独访问或操作时自动解封。
 - 状态迁移不合法时（参见 §3.6）返回 `409 Conflict`，错误体：`{ "error": { "code": "INVALID_STATE_TRANSITION", "message": "..." } }`。
-- `suspend`、`ban`、`close` 操作中的 `reason` 字段写入 `bars.status_reason`，`unsuspend` 时清空该字段。
+- `reject`、`suspend`、`ban`、`close` 操作中的 `reason` 字段写入 `bars.status_reason`，`approve` 和 `unsuspend` 时清空该字段。
 - 所有操作记录到 `admin_actions` 审计表，`admin_id` 取当前登录用户 ID。
 
 ### 5.3 个人中心接口
@@ -415,7 +414,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 按创建时间倒序返回当前用户创建的吧，支持 cursor 分页。执行查询前，对 `suspended` 且已到期的吧自动解封（见 §3.7），确保返回的 `status` 字段反映最新状态。包含所有状态的吧（`pending_review`、`active`、`rejected`、`suspended`、`permanently_banned`、`closed`）。
 
 查询参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
-响应字段：每条吧包含 `id`、`name`、`status`、`rejectReason`（被拒绝时有值）、`createdAt` 等基本信息。
+响应字段：每条吧包含 `id`、`name`、`status`、`statusReason`（状态变更原因，如被拒绝/封禁/关闭原因）、`createdAt` 等基本信息。
 
 #### `PATCH /api/users/me/profile` — 编辑个人资料
 
