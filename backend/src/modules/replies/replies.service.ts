@@ -1,4 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { Reply } from './reply.entity';
@@ -80,6 +83,15 @@ export class RepliesService {
     // Update post's reply_count and last_reply_at
     await this.postsService.incrementReplyCount(postId, saved.createdAt);
 
-    return saved;
+    const createdReply = await this.repliesRepository.findOne({
+      where: { id: saved.id },
+      relations: ['author'],
+    });
+
+    if (!createdReply) {
+      throw new InternalServerErrorException('Failed to load created reply');
+    }
+
+    return createdReply;
   }
 }

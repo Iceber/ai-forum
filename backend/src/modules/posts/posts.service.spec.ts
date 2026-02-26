@@ -113,9 +113,15 @@ describe('PostsService', () => {
   });
 
   describe('create', () => {
-    it('should create and save a new post', async () => {
+    it('should create, save, and return post with author and bar relations', async () => {
+      const postWithRelations = {
+        ...mockPost,
+        author: { id: 'user-uuid-1', nickname: 'Alice' },
+        bar: { id: 'bar-uuid-1', name: 'Test Bar' },
+      };
       repo.create.mockReturnValue(mockPost as any);
       repo.save.mockResolvedValue(mockPost as any);
+      repo.findOne.mockResolvedValue(postWithRelations as any);
 
       const result = await service.create(
         {
@@ -126,8 +132,12 @@ describe('PostsService', () => {
         'user-uuid-1',
       );
 
-      expect(result.id).toBe('post-uuid-1');
+      expect(result).toEqual(postWithRelations);
       expect(repo.save).toHaveBeenCalledWith(mockPost);
+      expect(repo.findOne).toHaveBeenCalledWith({
+        where: { id: 'post-uuid-1' },
+        relations: ['author', 'bar'],
+      });
     });
   });
 
