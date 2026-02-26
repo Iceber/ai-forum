@@ -20,17 +20,28 @@ async function bootstrap() {
 
   const allowAnyOrigin = allowedOrigins.includes('*');
   const allowMissingOrigin = process.env.NODE_ENV !== 'production';
+  const allowAnyOriginInProd = process.env.CORS_ALLOW_ANY === 'true';
 
   if (allowAnyOrigin && process.env.NODE_ENV === 'production') {
+    if (!allowAnyOriginInProd) {
+      throw new Error(
+        'CORS_ORIGIN="*" is not allowed in production unless CORS_ALLOW_ANY=true',
+      );
+    }
     console.warn(
-      'CORS_ORIGIN is set to "*"; this permits any origin and weakens CORS protection in production.',
+      'CORS_ORIGIN="*" is enabled in production; this permits any origin and weakens CORS protection.',
     );
   }
 
   app.enableCors({
     origin: (origin, callback) => {
       if (!origin) {
-        if (allowMissingOrigin) return callback(null, true);
+        if (allowMissingOrigin) {
+          console.warn(
+            'CORS request with missing Origin header allowed in non-production environment.',
+          );
+          return callback(null, true);
+        }
         return callback(
           new Error(
             'CORS request rejected: Origin header is required in production',
