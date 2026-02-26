@@ -80,6 +80,15 @@ export class RepliesService {
     // Update post's reply_count and last_reply_at
     await this.postsService.incrementReplyCount(postId, saved.createdAt);
 
-    return saved;
+    const createdReply = await this.repliesRepository.findOne({
+      where: { id: saved.id },
+      relations: ['author'],
+    });
+
+    if (!createdReply) {
+      throw new NotFoundException('Reply not found');
+    }
+
+    return createdReply;
   }
 }
