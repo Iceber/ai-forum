@@ -20,7 +20,6 @@ export default function HomeClient({
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [meta, setMeta] = useState<PageMeta>(initialMeta);
   const [loading, setLoading] = useState(false);
-  const bars = initialBars;
 
   const loadMore = async () => {
     if (!meta.hasMore || loading) return;
@@ -52,11 +51,11 @@ export default function HomeClient({
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">推荐吧</h2>
         </div>
-        {bars.length === 0 ? (
+        {initialBars.length === 0 ? (
           <p className="text-gray-500 text-sm">暂无吧</p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {bars.map((bar) => (
+            {initialBars.map((bar) => (
               <BarCard
                 key={bar.id}
                 id={bar.id}
