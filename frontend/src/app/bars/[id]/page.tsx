@@ -1,31 +1,8 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import type { Bar, Post, ApiResponse, PageMeta } from '@/types';
-import PostCard from '@/components/post/PostCard';
+import type { Bar, Post, PageMeta } from '@/types';
 import BarPostsClient from './BarPostsClient';
-
-const API_BASES = Array.from(
-  new Set(
-    [
-      process.env.API_INTERNAL_URL,
-      process.env.NEXT_PUBLIC_API_URL,
-      'http://localhost:3001',
-    ].filter(Boolean),
-  ),
-);
-
-async function fetchApi<T>(path: string): Promise<ApiResponse<T> | null> {
-  for (const base of API_BASES) {
-    try {
-      const res = await fetch(`${base}${path}`, { cache: 'no-store' });
-      if (!res.ok) continue;
-      return (await res.json()) as ApiResponse<T>;
-    } catch {
-      // try next base URL
-    }
-  }
-  return null;
-}
+import { fetchApi } from '@/lib/server-api';
 
 async function fetchBar(id: string): Promise<Bar | null> {
   try {
