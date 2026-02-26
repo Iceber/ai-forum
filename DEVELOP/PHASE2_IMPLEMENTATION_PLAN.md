@@ -158,7 +158,7 @@ ALTER TABLE bars ALTER COLUMN status SET DEFAULT 'pending_review';
 | `reviewed_by` | UUID | FK → users.id, NULL | 审核人 |
 | `reviewed_at` | TIMESTAMPTZ | NULL | 审核时间 |
 | `status_reason` | TEXT | NULL | 封禁/关闭原因（适用于 `suspended`、`permanently_banned`、`closed` 状态） |
-| `suspend_until` | TIMESTAMPTZ | NULL | 临时封禁到期时间（null 表示永久封禁或非封禁状态） |
+| `suspend_until` | TIMESTAMPTZ | NULL | 临时封禁到期时间（仅 `suspended` 状态时有值，其他状态为 `null`） |
 | `member_count` | INTEGER | DEFAULT 0, NOT NULL | 成员数冗余计数，加入/退出时由服务层维护 |
 
 ### 4.2 新增 admin_actions 表（管理操作审计）
@@ -256,6 +256,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 | avatarUrl | string | 否 | 合法 URL |
 
 成功响应（201）：返回创建的吧对象（status=`pending_review`）。
+失败响应：`400` 必填字段缺失或字段校验失败；`409` 吧名已存在（错误码 `BAR_NAME_DUPLICATE`）。
 
 #### `POST /api/bars/:id/join` — 加入吧
 
@@ -350,6 +351,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 #### 管理员接口公共校验说明
 
 - 所有管理员接口在执行前先验证目标吧是否存在，不存在则返回 `404 Not Found`。
+- 所有管理员接口在执行业务逻辑前须先执行封禁到期自动解封检查（参见 §3.7），确保操作基于最新状态。
 - 状态迁移不合法时（参见 §3.6）返回 `409 Conflict`，错误体：`{ "error": { "code": "INVALID_STATE_TRANSITION", "message": "..." } }`。
 - `suspend`、`ban`、`close` 操作中的 `reason` 字段写入 `bars.status_reason`，`unsuspend` 时清空该字段。
 - 所有操作记录到 `admin_actions` 审计表，`admin_id` 取当前登录用户 ID。
@@ -363,6 +365,34 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 | GET | `/api/users/me/bars` | 是 | 我加入的吧列表（cursor 分页） |
 | GET | `/api/users/me/created-bars` | 是 | 我创建的吧列表（含所有状态） |
 | PATCH | `/api/users/me/profile` | 是 | 编辑个人资料 |
+
+#### `GET /api/users/me/posts` — 我的帖子列表
+
+按创建时间倒序返回当前用户发布的帖子，支持 cursor 分页。
+
+查询参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
+响应字段：每条帖子包含 `id`、`title`、`barId`、`barName`、`createdAt` 等基本信息。
+
+#### `GET /api/users/me/replies` — 我的回复列表
+
+按创建时间倒序返回当前用户发布的回复，支持 cursor 分页。
+
+查询参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
+响应字段：每条回复包含 `id`、`content`（截断预览）、`postId`、`postTitle`、`barName`、`createdAt` 等基本信息。
+
+#### `GET /api/users/me/bars` — 我加入的吧列表
+
+按加入时间倒序返回当前用户已加入的吧，支持 cursor 分页。
+
+查询参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
+响应字段：每条吧包含 `id`、`name`、`description`、`status`、`memberCount`、`joinedAt` 等基本信息。含所有状态的吧（包括 `suspended`、`permanently_banned`、`closed`），附带状态标识。
+
+#### `GET /api/users/me/created-bars` — 我创建的吧列表
+
+按创建时间倒序返回当前用户创建的吧，支持 cursor 分页。包含所有状态的吧（`pending_review`、`active`、`rejected`、`suspended`、`permanently_banned`、`closed`）。
+
+查询参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
+响应字段：每条吧包含 `id`、`name`、`status`、`rejectReason`（被拒绝时有值）、`createdAt` 等基本信息。
 
 #### `PATCH /api/users/me/profile` — 编辑个人资料
 
@@ -601,12 +631,15 @@ admin/bars       │
    │          │
   关闭弹窗  POST /api/bars/:id/leave
               │
-         ┌────┴────┐
-        200         403
-         │           │
-   按钮切换为"加入吧"  提示"你是该吧吧主，
-   memberCount -1     无法退出，请先转让
-                      吧主（功能待开放）"
+         ┌────┼────────┐
+        200   403       409
+         │     │         │
+   按钮切换为  提示"你是  提示"该吧当前
+   "加入吧"   该吧吧主，  状态不允许
+   memberCount 无法退出，  退出"
+   -1         请先转让
+              吧主（功能
+              待开放）"
 ```
 
 **细节说明**：
