@@ -1,27 +1,12 @@
-import { notFound } from 'next/navigation';
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { Post, Reply } from '@/types';
+import { useParams } from 'next/navigation';
+import type { Post, Reply, ApiResponse } from '@/types';
 import PostRepliesClient from './PostRepliesClient';
-import { fetchApi } from '@/lib/server-api';
 
-async function fetchPost(id: string): Promise<Post | null> {
-  try {
-    const json = await fetchApi<Post>(`/api/posts/${id}`);
-    if (!json) return null;
-    return json.error ? null : (json.data ?? null);
-  } catch {
-    return null;
-  }
-}
-
-async function fetchReplies(postId: string): Promise<Reply[]> {
-  try {
-    const json = await fetchApi<Reply[]>(`/api/posts/${postId}/replies?limit=50`);
-    return json?.data ?? [];
-  } catch {
-    return [];
-  }
-}
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN', {
@@ -33,17 +18,60 @@ function formatDate(dateStr: string) {
   });
 }
 
-export default async function PostPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const [post, replies] = await Promise.all([
-    fetchPost(params.id),
-    fetchReplies(params.id),
-  ]);
+export default function PostPage() {
+  const params = useParams<{ id: string }>();
+  const [post, setPost] = useState<Post | null>(null);
+  const [replies, setReplies] = useState<Reply[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
-  if (!post) return notFound();
+  useEffect(() => {
+    if (!params.id) return;
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const [postRes, repliesRes] = await Promise.all([
+          fetch(`${API_BASE}/api/posts/${params.id}`),
+          fetch(`${API_BASE}/api/posts/${params.id}/replies?limit=50`),
+        ]);
+
+        if (!cancelled) {
+          if (!postRes.ok) {
+            setNotFound(true);
+          } else {
+            const postJson: ApiResponse<Post> = await postRes.json();
+            if (postJson.data) setPost(postJson.data);
+            else setNotFound(true);
+          }
+
+          if (repliesRes.ok) {
+            const repliesJson: ApiResponse<Reply[]> = await repliesRes.json();
+            if (repliesJson.data) setReplies(repliesJson.data);
+          }
+        }
+      } catch {
+        if (!cancelled) setNotFound(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [params.id]);
+
+  if (loading) {
+    return <p className="text-gray-500 text-center py-12">加载中…</p>;
+  }
+
+  if (notFound || !post) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-500 mb-4">帖子不存在或已被删除</p>
+        <Link href="/" className="text-blue-600 hover:underline">返回首页</Link>
+      </div>
+    );
+  }
 
   return (
     <div>

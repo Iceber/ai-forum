@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Post, Bar, PageMeta, ApiResponse } from '@/types';
 import PostCard from '@/components/post/PostCard';
 import BarCard from '@/components/bar/BarCard';
 import apiClient from '@/lib/api-client';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 interface HomeClientProps {
   initialPosts: Post[];
@@ -19,19 +21,45 @@ export default function HomeClient({
 }: HomeClientProps) {
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [meta, setMeta] = useState<PageMeta>(initialMeta);
+  const [bars, setBars] = useState<Bar[]>(initialBars);
   const [loading, setLoading] = useState(false);
+
+  // Client-side fallback: fetch data if SSR returned empty
+  useEffect(() => {
+    async function fetchFallback() {
+      if (posts.length === 0) {
+        try {
+          const res = await fetch(`${API_BASE}/api/posts?limit=20`);
+          if (res.ok) {
+            const json: ApiResponse<Post[]> = await res.json();
+            if (json.data && json.data.length > 0) {
+              setPosts(json.data);
+              setMeta(json.meta ?? { hasMore: false });
+            }
+          }
+        } catch { /* ignore */ }
+      }
+      if (bars.length === 0) {
+        try {
+          const res = await fetch(`${API_BASE}/api/bars?limit=12`);
+          if (res.ok) {
+            const json: ApiResponse<Bar[]> = await res.json();
+            if (json.data && json.data.length > 0) {
+              setBars(json.data);
+            }
+          }
+        } catch { /* ignore */ }
+      }
+    }
+    fetchFallback();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = async () => {
     if (!meta.hasMore || loading) return;
     setLoading(true);
     try {
-      const res = await apiClient.get<Post[]>('/api/posts', {
-        params: { cursor: meta.cursor, limit: 20 },
-      });
-      // axios interceptor unwraps data; meta lives on the original response
-      // We need to handle the raw response to get meta
       const rawRes = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/api/posts?cursor=${meta.cursor ?? ''}&limit=20`,
+        `${API_BASE}/api/posts?cursor=${meta.cursor ?? ''}&limit=20`,
       );
       const json: ApiResponse<Post[]> = await rawRes.json();
       if (json.data) {

@@ -1,45 +1,69 @@
-import { notFound } from 'next/navigation';
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { Bar, Post, PageMeta } from '@/types';
+import { useParams } from 'next/navigation';
+import type { Bar, Post, PageMeta, ApiResponse } from '@/types';
 import BarPostsClient from './BarPostsClient';
-import { fetchApi } from '@/lib/server-api';
 
-async function fetchBar(id: string): Promise<Bar | null> {
-  try {
-    const json = await fetchApi<Bar>(`/api/bars/${id}`);
-    if (!json) return null;
-    return json.error ? null : (json.data ?? null);
-  } catch {
-    return null;
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+
+export default function BarPage() {
+  const params = useParams<{ id: string }>();
+  const [bar, setBar] = useState<Bar | null>(null);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [meta, setMeta] = useState<PageMeta>({ hasMore: false });
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    if (!params.id) return;
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const [barRes, postsRes] = await Promise.all([
+          fetch(`${API_BASE}/api/bars/${params.id}`),
+          fetch(`${API_BASE}/api/posts?barId=${params.id}&limit=20`),
+        ]);
+
+        if (!cancelled) {
+          if (!barRes.ok) {
+            setNotFound(true);
+          } else {
+            const barJson: ApiResponse<Bar> = await barRes.json();
+            if (barJson.data) setBar(barJson.data);
+            else setNotFound(true);
+          }
+
+          if (postsRes.ok) {
+            const postsJson: ApiResponse<Post[]> = await postsRes.json();
+            if (postsJson.data) setPosts(postsJson.data);
+            if (postsJson.meta) setMeta(postsJson.meta);
+          }
+        }
+      } catch {
+        if (!cancelled) setNotFound(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [params.id]);
+
+  if (loading) {
+    return <p className="text-gray-500 text-center py-12">加载中…</p>;
   }
-}
 
-async function fetchBarPosts(
-  barId: string,
-): Promise<{ posts: Post[]; meta: PageMeta }> {
-  try {
-    const json = await fetchApi<Post[]>(`/api/posts?barId=${barId}&limit=20`);
-    if (!json) return { posts: [], meta: { hasMore: false } };
-    return {
-      posts: json.data ?? [],
-      meta: json.meta ?? { hasMore: false },
-    };
-  } catch {
-    return { posts: [], meta: { hasMore: false } };
+  if (notFound || !bar) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-500 mb-4">板块不存在</p>
+        <Link href="/" className="text-blue-600 hover:underline">返回首页</Link>
+      </div>
+    );
   }
-}
-
-export default async function BarPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const [bar, { posts, meta }] = await Promise.all([
-    fetchBar(params.id),
-    fetchBarPosts(params.id),
-  ]);
-
-  if (!bar) return notFound();
 
   return (
     <div>
