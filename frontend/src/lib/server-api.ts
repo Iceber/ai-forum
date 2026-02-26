@@ -17,7 +17,7 @@ const API_BASES = Array.from(
  * @param path API path (recommended to start with '/api/...').
  * @returns Parsed ApiResponse on success.
  *          Returns null if all bases fail/return non-2xx or JSON parsing fails.
- *          JSON parse errors log a warning and stop further fallback attempts.
+ *          JSON parse errors log a warning and return null immediately after a successful response, so no further fallback is attempted.
  */
 export async function fetchApi<T>(path: string): Promise<ApiResponse<T> | null> {
   for (const base of API_BASES) {
