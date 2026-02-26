@@ -21,7 +21,7 @@ describe('AppController (e2e)', () => {
   let createdPostId: string;
 
   // Provide a real bar ID from your seed data or create one before running
-  const TEST_BAR_ID = process.env.TEST_BAR_ID ?? '00000000-0000-0000-0000-000000000001';
+  const TEST_BAR_ID = process.env.TEST_BAR_ID ?? '00000000-0000-4000-a000-000000000001';
 
   const testUser = {
     email: `e2e_${Date.now()}@example.com`,
