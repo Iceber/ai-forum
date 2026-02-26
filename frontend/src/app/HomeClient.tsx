@@ -20,7 +20,7 @@ export default function HomeClient({
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [meta, setMeta] = useState<PageMeta>(initialMeta);
   const [loading, setLoading] = useState(false);
-  const [bars] = useState<Bar[]>(initialBars);
+  const bars = initialBars;
 
   const loadMore = async () => {
     if (!meta.hasMore || loading) return;
