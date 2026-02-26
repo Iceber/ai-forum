@@ -23,13 +23,13 @@ export class Bar {
   @Column({ type: 'text' })
   description: string;
 
-  @Column({ name: 'avatar_url', length: 500, nullable: true })
+  @Column({ name: 'avatar_url', type: 'varchar', length: 500, nullable: true })
   avatarUrl: string | null;
 
   @Column({ type: 'text', nullable: true })
   rules: string | null;
 
-  @Column({ length: 100, nullable: true })
+  @Column({ type: 'varchar', length: 100, nullable: true })
   category: string | null;
 
   @Column({ length: 20, default: 'active' })
