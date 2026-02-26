@@ -45,7 +45,7 @@
 - 我的回复：查看自己发布的回复列表。
 - 我的吧：查看已加入吧列表。
 - 我创建的吧：查看自己申请创建的吧及其审核状态。
-- 个人资料编辑：修改昵称、头像、个人签名。
+- 个人资料编辑：修改昵称、个人签名（头像编辑移入 PRE_PHASE3）。
 
 ---
 
@@ -72,7 +72,7 @@
 - 被拒绝的记录保留可查阅，不可删除。
 
 ### 3.3 个人资料编辑安全边界
-- 头像上传（预签名上传链路）整体移入 PRE_PHASE3；第二阶段仅支持用户直接填写头像 URL，不对接任何上传服务。
+- 头像编辑（包括头像 URL 填写与预签名上传链路）整体移入 PRE_PHASE3；第二阶段个人资料编辑仅支持修改昵称和个人签名，不涉及头像字段。
 - 个人签名限长 200 字符。
 
 ### 3.4 管理员身份判定
@@ -369,14 +369,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 ```json
 {
   "nickname": "新昵称",
-  "avatarUrl": "https://...",
   "bio": "个人签名"
 }
 ```
 | 字段 | 类型 | 必填 | 校验 |
 |------|------|------|------|
 | nickname | string | 否 | 2-50 字符 |
-| avatarUrl | string | 否 | 合法 URL |
 | bio | string | 否 | 最长 200 字符 |
 
 ---
@@ -391,7 +389,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 | 个人中心 | `/profile` | CSR（需登录） | 个人中心首页（我的帖子，默认页签） |
 | 我的回复 | `/profile/replies` | CSR（需登录） | 我的回复列表（cursor 分页） |
 | 我的吧 | `/profile/bars` | CSR（需登录） | 已加入吧列表（cursor 分页） |
-| 个人资料编辑 | `/profile/edit` | CSR（需登录） | 编辑昵称、头像、签名 |
+| 个人资料编辑 | `/profile/edit` | CSR（需登录） | 编辑昵称、签名（头像编辑在 PRE_PHASE3） |
 | 我创建的吧 | `/profile/created-bars` | CSR（需登录） | 查看创建的吧及审核状态 |
 | 管理员后台 | `/admin` | CSR（需 admin） | 管理员仪表盘入口 |
 | 吧审核列表 | `/admin/bars/pending` | CSR（需 admin） | 待审核吧列表与审核操作 |
@@ -447,12 +445,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 - 不实现回复增强：楼中楼回复、引用回复、楼主标识（移入 PRE_PHASE3）。
 - 不实现社区治理扩展：吧资料编辑、角色管理、吧主转让、内容隐藏（移入 PRE_PHASE3）。
 - 不实现帖子/回复删除（移入 PRE_PHASE3）。
+- 不实现头像编辑（头像 URL 填写与预签名上传链路均移入 PRE_PHASE3）。
 - 不实现 Markdown 渲染与媒体上传（移入 PRE_PHASE3）。
 - 不实现通知与提醒能力（@提醒、消息中心）。
 - 不实现全局搜索能力。
 - 不实现接口限流。
 - 不实现帖子/回复二次编辑。
-- 不实现编辑历史记录。
 - 不实现用户封禁（帖吧级/全站级用户封禁）。
 
 ---
@@ -653,7 +651,7 @@ admin/bars       │
         │
         ▼
   跳转 /profile/edit
-  表单预填：昵称、头像 URL、个人签名
+  表单预填：昵称、个人签名
         │
         ▼
   修改内容后点击"保存"
@@ -671,7 +669,7 @@ admin/bars       │
 ```
 
 **细节说明**：
-- 头像上传（预签名链路）在第二阶段暂不实现，仅支持填写 URL。
+- 头像编辑（URL 填写与预签名上传）整体移入 PRE_PHASE3，第二阶段个人资料编辑仅支持修改昵称和签名。
 - 个人签名限长 200 字符，前端展示实时字符计数。
 - 所有字段均为选填，只提交有修改的字段（PATCH 语义）。
 
