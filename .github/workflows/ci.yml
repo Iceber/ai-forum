@@ -219,11 +219,80 @@ jobs:
           docker compose logs
           exit 1
 
-      - name: Frontend E2E smoke checks
+      - name: Frontend E2E – page accessibility
         run: |
-          curl -fsS http://localhost:3000 >/dev/null
-          curl -fsS http://localhost:3000/login >/dev/null
-          curl -fsS http://localhost:3000/register >/dev/null
+          echo "--- Checking pages return 200 ---"
+          curl -fsS http://localhost:3000          >/dev/null
+          curl -fsS http://localhost:3000/login     >/dev/null
+          curl -fsS http://localhost:3000/register  >/dev/null
+          echo "All pages accessible."
+
+      - name: Frontend E2E – page content verification
+        run: |
+          echo "--- Home page should contain key elements ---"
+          HOME=$(curl -sS http://localhost:3000)
+          echo "$HOME" | grep -qi "bar\|forum\|post\|AI" || { echo "Home page missing expected content"; exit 1; }
+
+          echo "--- Login page should contain form ---"
+          LOGIN=$(curl -sS http://localhost:3000/login)
+          echo "$LOGIN" | grep -qi "email\|password\|login" || { echo "Login page missing form elements"; exit 1; }
+
+          echo "--- Register page should contain form ---"
+          REGISTER=$(curl -sS http://localhost:3000/register)
+          echo "$REGISTER" | grep -qi "email\|password\|register\|nickname" || { echo "Register page missing form elements"; exit 1; }
+
+          echo "All page content verified."
+
+      - name: Frontend E2E – backend API integration
+        env:
+          API_URL: http://localhost:3001/api
+          TEST_BAR_ID: 00000000-0000-4000-a000-000000000011
+        run: |
+          echo "--- Verify backend API is reachable from host ---"
+          BARS=$(curl -sS "$API_URL/bars")
+          echo "$BARS" | jq -e '.data | length >= 1' || { echo "No bars returned from API"; echo "$BARS"; exit 1; }
+
+          echo "--- Register a test user via API ---"
+          EMAIL="fe-e2e-$(date +%s)@example.com"
+          REG_RESP=$(curl -sS -X POST "$API_URL/auth/register" \
+            -H "Content-Type: application/json" \
+            -d "{\"email\":\"$EMAIL\",\"password\":\"Password123!\",\"nickname\":\"FE-E2E\"}" \
+            -w $'\n%{http_code}')
+          REG_STATUS=$(echo "$REG_RESP" | tail -n1)
+          REG_BODY=$(echo "$REG_RESP" | sed '$d')
+          [ "$REG_STATUS" = "201" ] || { echo "Register failed ($REG_STATUS)"; echo "$REG_BODY"; exit 1; }
+          TOKEN=$(echo "$REG_BODY" | jq -r '.data.accessToken')
+
+          echo "--- Create a post via API ---"
+          POST_RESP=$(curl -sS -X POST "$API_URL/posts" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d "{\"barId\":\"$TEST_BAR_ID\",\"title\":\"Frontend E2E Post\",\"content\":\"Created during CI\",\"contentType\":\"plaintext\"}" \
+            -w $'\n%{http_code}')
+          POST_STATUS=$(echo "$POST_RESP" | tail -n1)
+          POST_BODY=$(echo "$POST_RESP" | sed '$d')
+          [ "$POST_STATUS" = "201" ] || { echo "Create post failed ($POST_STATUS)"; echo "$POST_BODY"; exit 1; }
+          POST_ID=$(echo "$POST_BODY" | jq -r '.data.id')
+
+          echo "--- Create a reply via API ---"
+          REPLY_RESP=$(curl -sS -X POST "$API_URL/posts/$POST_ID/replies" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"content":"CI reply","contentType":"plaintext"}' \
+            -w $'\n%{http_code}')
+          REPLY_STATUS=$(echo "$REPLY_RESP" | tail -n1)
+          REPLY_BODY=$(echo "$REPLY_RESP" | sed '$d')
+          [ "$REPLY_STATUS" = "201" ] || { echo "Create reply failed ($REPLY_STATUS)"; echo "$REPLY_BODY"; exit 1; }
+
+          echo "--- Verify bar detail page renders ---"
+          BAR_PAGE=$(curl -sS http://localhost:3000/bars/$TEST_BAR_ID)
+          echo "$BAR_PAGE" | grep -qi "frontend-e2e-bar\|post\|bar" || { echo "Bar page missing expected content"; exit 1; }
+
+          echo "--- Verify post detail page renders ---"
+          POST_PAGE=$(curl -sS http://localhost:3000/posts/$POST_ID)
+          echo "$POST_PAGE" | grep -qi "Frontend E2E Post\|post\|reply" || { echo "Post page missing expected content"; exit 1; }
+
+          echo "All API integration checks passed."
 
       - name: Stop containers
         if: always()
