@@ -114,6 +114,7 @@
 | `active` | `permanently_banned` | 管理员永久封禁 |
 | `active` | `closed` | 管理员关闭吧 |
 | `suspended` | `active` | 管理员手动解封 / 封禁到期自动解封 |
+| `suspended` | `suspended` | 管理员重新封禁（延长时长或修改原因，覆盖原 `suspend_until` 和 `status_reason`） |
 | `suspended` | `permanently_banned` | 管理员在封禁期内升级为永久封禁 |
 | `suspended` | `closed` | 管理员在封禁期内关闭吧 |
 | `rejected` | — | 终态，不可迁移（创建者需发起新申请） |
@@ -127,7 +128,7 @@
 临时封禁吧（`suspended`）到期后的解封采用**延迟求值（Lazy Evaluation）**策略：
 
 - **适用范围**：任何需要读取或依赖吧状态的操作（包括 `GET /api/bars`、`GET /api/bars/:id`、`POST /api/bars/:id/join`、`POST /api/bars/:id/leave` 以及所有管理员接口），在执行业务逻辑前均应先执行到期检查并在同一事务内完成自动解封，确保状态读取的一致性。
-- 每次访问吧详情（`GET /api/bars/:id`）时，若吧状态为 `suspended` 且 `suspend_until ≤ NOW()`，服务端在同一事务内将其状态更新为 `active` 后再返回结果（事务确保并发读取时不产生重复解封写入）。
+- 每次访问吧详情（`GET /api/bars/:id`）时，若吧状态为 `suspended` 且 `suspend_until ≤ NOW()`，服务端在同一事务内将其状态更新为 `active`、同时清空 `suspend_until` 和 `status_reason` 后再返回结果（事务确保并发读取时不产生重复解封写入）。与手动 `unsuspend` 行为保持一致。
 - 吧列表（`GET /api/bars`）查询时同样执行此检查，确保 `active` 过滤的准确性。
 - 无需额外定时任务，第二阶段实现成本低。
 - 后续可在工程质量迭代中引入定时任务（`@nestjs/schedule`）批量处理到期封禁，两种策略可并存。
@@ -305,7 +306,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 { "reason": "拒绝原因说明" }
 ```
 将吧状态变更为 `rejected`，记录拒绝原因和审计日志。
-失败响应：`400` 未提供拒绝原因；`404` 吧不存在；`409` 吧当前状态不允许此操作。
+失败响应：`400` 未提供拒绝原因；`404` 吧不存在；`409` 吧当前状态不允许此操作（非 `pending_review`）。
 
 #### `POST /api/admin/bars/:id/suspend` — 临时封禁
 
