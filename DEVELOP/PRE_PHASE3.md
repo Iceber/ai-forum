@@ -44,6 +44,10 @@
 - 在个人中心增加"我的收藏"页签，查看已收藏帖子列表。
 - 依赖互动能力（§2.2）中的收藏功能。
 
+### 2.7 个人资料：头像编辑
+- 第一步（本阶段）：在 `PATCH /api/users/me/profile` 中开放 `avatarUrl` 字段，允许用户直接填写头像图片 URL。
+- 第二步（后续迭代）：接入预签名上传链路（依赖媒体上传能力 §2.5），允许用户从本地上传头像图片。
+
 ---
 
 ## 3. UX 边界分析
@@ -220,6 +224,23 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 |------|------|------|------|
 | GET | `/api/users/me/favorites` | 是 | 我的收藏列表（cursor 分页） |
 
+#### `PATCH /api/users/me/profile` — 编辑个人资料（扩展：新增头像字段）
+
+> 第二阶段已实现昵称和签名编辑，本阶段在同一接口中追加 `avatarUrl` 字段。
+
+请求体（仅列出本阶段新增字段）：
+```json
+{
+  "avatarUrl": "https://cdn.example.com/avatar.png"
+}
+```
+| 字段 | 类型 | 必填 | 校验 |
+|------|------|------|------|
+| avatarUrl | string | 否 | 合法 URL；接入预签名上传后可传预签名返回的 `fileUrl` |
+
+- 第一步：前端允许用户手动填写头像 URL，通过 `avatarUrl` 字段提交。
+- 第二步（依赖 §5.5 媒体上传）：前端通过预签名上传链路获得 `fileUrl` 后，将其作为 `avatarUrl` 传入，流程不变。
+
 ### 5.7 帖子/回复列表响应扩展
 
 帖子列表和详情响应中新增字段：
@@ -289,4 +310,4 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 | **bars** | 角色管理、转让、吧资料编辑、内容隐藏 |
 | **posts** | 删除 API、帖子分享记录、响应增加互动计数 |
 | **replies** | 楼中楼子回复查询（含分页）、删除 API、响应增加互动计数 |
-| **users** | 个人中心收藏查询 |
+| **users** | 个人中心收藏查询；`PATCH /api/users/me/profile` 扩展 `avatarUrl` 字段 |

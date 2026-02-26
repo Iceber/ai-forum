@@ -24,6 +24,10 @@
 - 吧级用户封禁（版主/吧主操作）
 - 全站用户封禁（管理员操作）
 
+### 吧列表与分页优化
+- `GET /api/users/me/bars`（我加入的吧）是否需过滤 `pending_review`/`rejected` 状态：创建者在 `bar_members` 中有 owner 记录，这些吧可能同时出现在"我的吧"和"我创建的吧"中，需评估 UX 合理性
+- `GET /api/bars` 基于 `memberCount` 排序的 cursor 分页稳定性：成员数可在翻页间变化导致游标漂移，需评估是否引入复合游标或改用稳定排序字段
+
 ### 基础设施与工程
 - 接口限流基线落地（`@nestjs/throttler`）：登录按 IP + email 限流，发帖/回帖按 user_id 限流
 - 本地一键启动编排完善（postgres / backend / frontend）

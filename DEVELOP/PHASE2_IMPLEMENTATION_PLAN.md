@@ -37,7 +37,7 @@
 
 ### 2.3 加入/退出吧与首页展示
 - 加入/退出吧：用户可主动加入或退出吧，沉淀"我的吧"数据。吧主不可退出（需先转让）。
-- 加入吧前置校验：吧状态必须为 `active`。
+- 加入吧前置校验：吧状态必须为 `active` 或 `suspended`（临时封禁期间仍允许加入）。
 - 首页"我的吧"展示：用户登录后，在首页展示其已加入吧列表。
 
 ### 2.4 个人中心
@@ -45,7 +45,7 @@
 - 我的回复：查看自己发布的回复列表。
 - 我的吧：查看已加入吧列表。
 - 我创建的吧：查看自己申请创建的吧及其审核状态。
-- 个人资料编辑：修改昵称、头像、个人签名。
+- 个人资料编辑：修改昵称、个人签名（头像编辑移入 PRE_PHASE3）。
 
 ---
 
@@ -53,16 +53,16 @@
 
 ### 3.1 吧状态对用户行为的影响
 
-| 吧状态 | 浏览内容 | 发帖/回复 | 加入/退出 | 在公开列表可见 |
-|--------|---------|----------|----------|--------------|
-| `active` | ✅ | ✅ | ✅ | ✅ |
-| `pending_review` | ❌（仅创建者可见） | ❌ | ❌ | ❌ |
-| `rejected` | ❌（仅创建者可见状态） | ❌ | ❌ | ❌ |
-| `suspended` | ✅（只读） | ❌ | ❌ | ❌（从列表移除） |
-| `permanently_banned` | ✅（只读） | ❌ | ❌ | ❌ |
-| `closed` | ✅（只读） | ❌ | ❌ | ❌ |
+| 吧状态 | 浏览内容 | 发帖/回复 | 加入 | 退出 | 在公开列表可见 |
+|--------|---------|----------|------|------|--------------|
+| `active` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `pending_review` | ❌（仅创建者可见） | ❌ | ❌ | ❌ | ❌ |
+| `rejected` | ❌（仅创建者可见状态） | ❌ | ❌ | ❌ | ❌ |
+| `suspended` | ✅（只读） | ❌ | ✅ | ✅ | ❌（从列表移除） |
+| `permanently_banned` | ✅（只读） | ❌ | ❌ | ❌ | ❌ |
+| `closed` | ✅（只读） | ❌ | ❌ | ❌ | ❌ |
 
-- 已加入被封禁/关闭吧的用户，在"我的吧"列表中仍可看到该吧（附带状态标识），可进入查看历史内容。
+- `suspended` 状态的吧：新用户可加入，已有成员可退出。`permanently_banned` 或 `closed` 状态的吧：不允许任何人加入或退出，已有成员仍可在"我的吧"列表中看到该吧（附带状态标识）并进入查看历史内容。
 - 被封禁/关闭的吧详情页顶部展示醒目的状态提示（如"该吧已被封禁"）。
 - 在被封禁/关闭的吧内，发帖和回复按钮禁用并展示提示。
 
@@ -72,12 +72,75 @@
 - 被拒绝的记录保留可查阅，不可删除。
 
 ### 3.3 个人资料编辑安全边界
-- 头像上传使用预签名上传链路（预签名上传的完整实现在 PRE_PHASE3）。
+- 头像编辑（包括头像 URL 填写与预签名上传链路）整体移入 PRE_PHASE3；第二阶段个人资料编辑仅支持修改昵称和个人签名，不涉及头像字段。
 - 个人签名限长 200 字符。
 
 ### 3.4 管理员身份判定
 - 管理员通过 `users.role = 'admin'` 判定。
 - 第二阶段管理员手动指定（数据库直接修改），不提供管理员注册/指派 UI。
+
+### 3.5 吧列表与详情响应字段补充
+
+第二阶段 `GET /api/bars` 和 `GET /api/bars/:id` 响应字段需扩展以支持前端渲染加入/退出按钮、成员数展示等功能：
+
+**`GET /api/bars` 列表响应（每条吧记录新增）**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `memberCount` | integer | 吧成员数（来自 `bars.member_count` 冗余字段） |
+| `isMember` | boolean \| null | 已登录时返回是否已加入，未登录返回 `null` |
+
+> `GET /api/bars` 在第二阶段起仅返回 `status = 'active'` 的吧（第一阶段 `active` 为默认值，第二阶段变为显式过滤约束）。
+
+**`GET /api/bars/:id` 详情响应（新增字段）**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `memberCount` | integer | 吧成员数 |
+| `isMember` | boolean \| null | 已登录时返回是否已加入，未登录返回 `null` |
+| `memberRole` | string \| null | 已加入时返回角色（`member` / `owner`），否则 `null`。`moderator` 角色在 PRE_PHASE3 启用，第二阶段仅有 `member` 和 `owner` |
+| `suspendUntil` | ISO8601 \| null | 临时封禁时返回到期时间，其他状态为 `null` |
+| `statusReason` | string \| null | 状态变更原因（`rejected`/`suspended`/`permanently_banned`/`closed` 时有值），其他状态为 `null` |
+
+> `suspended`/`permanently_banned`/`closed` 状态的吧详情页仍可通过 `GET /api/bars/:id` 访问（已加入成员需能查看历史内容），`pending_review`/`rejected` 状态仅创建者可访问（见 §5.1）。吧列表（`GET /api/bars`）仅展示 `active` 状态的吧。
+
+### 3.6 吧状态流转规则
+
+| 当前状态 | 可迁移至 | 操作来源 |
+|---------|---------|---------|
+| `pending_review` | `active` | 管理员审核通过 |
+| `pending_review` | `rejected` | 管理员审核拒绝 |
+| `active` | `suspended` | 管理员临时封禁 |
+| `active` | `permanently_banned` | 管理员永久封禁 |
+| `active` | `closed` | 管理员关闭吧 |
+| `suspended` | `active` | 管理员手动解封 / 封禁到期自动解封 |
+| `suspended` | `suspended` | 管理员重新封禁（延长时长或修改原因，覆盖原 `suspend_until` 和 `status_reason`） |
+| `suspended` | `permanently_banned` | 管理员在封禁期内升级为永久封禁 |
+| `suspended` | `closed` | 管理员在封禁期内关闭吧 |
+| `rejected` | — | 终态，不可迁移（创建者需发起新申请） |
+| `permanently_banned` | — | 终态，不可迁移 |
+| `closed` | — | 终态，不可迁移 |
+
+> 管理员接口在执行状态变更前应校验当前状态是否满足迁移前提，不合法时返回 `409 Conflict`，错误码 `INVALID_STATE_TRANSITION`。
+
+### 3.7 封禁到期自动解封策略
+
+临时封禁吧（`suspended`）到期后的解封采用**延迟求值（Lazy Evaluation）**策略：
+
+- **适用范围**：任何需要读取或依赖吧状态的操作，包括：
+  - `GET /api/bars`、`GET /api/bars/:id`
+  - `POST /api/bars/:id/join`、`POST /api/bars/:id/leave`
+  - `GET /api/users/me/bars`、`GET /api/users/me/created-bars`（这两个端点返回吧的 `status` 字段，需确保状态时效性）
+  - 所有针对特定吧（`:id`）的管理员接口（`approve`/`reject`/`suspend`/`unsuspend`/`ban`/`close`）
+  
+  上述操作在执行业务逻辑前均应先执行到期检查并在同一事务内完成自动解封，确保状态读取的一致性。
+- 每次访问吧详情（`GET /api/bars/:id`）时，若吧状态为 `suspended` 且 `suspend_until ≤ NOW()`，服务端在同一事务内将其状态更新为 `active`、同时清空 `suspend_until` 和 `status_reason` 后再返回结果（事务确保并发读取时不产生重复解封写入）。与手动 `unsuspend` 行为保持一致。
+- 吧列表（`GET /api/bars`）查询时同样执行此检查，确保 `active` 过滤的准确性。
+- 无需额外定时任务，第二阶段实现成本低。
+- 后续可在工程质量迭代中引入定时任务（`@nestjs/schedule`）批量处理到期封禁，两种策略可并存。
+- **实现要求（面向未来迁移）**：Lazy Eval 到期解封逻辑应封装为**独立的服务方法**（如 `BarsService.autoUnsuspendIfExpired(barId)`），由各业务端点在需要时显式调用，而非耦合在数据库查询层或全局中间件中。此设计确保：(1) 各业务端点对解封逻辑的依赖是显式、可审计的；(2) 未来迁移到异步定时任务方式时，只需移除各调用点的同步调用，无需重构业务逻辑；(3) 单元测试可独立验证解封行为。
+
+> **边界说明**：若封禁已通过 Lazy Evaluation 自动到期解封（吧状态已变为 `active`），此时管理员手动调用 `POST /api/admin/bars/:id/unsuspend` 会返回 `409 INVALID_STATE_TRANSITION`（当前状态非 `suspended`）。这是预期行为，前端应将此 `409` 提示为"该吧封禁已自动到期，无需手动解封，请刷新查看最新状态"，避免误导管理员认为操作失败。
 
 ---
 
@@ -98,11 +161,11 @@ ALTER TABLE bars ALTER COLUMN status SET DEFAULT 'pending_review';
 
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
-| `reject_reason` | TEXT | NULL | 审核拒绝原因 |
 | `reviewed_by` | UUID | FK → users.id, NULL | 审核人 |
 | `reviewed_at` | TIMESTAMPTZ | NULL | 审核时间 |
-| `suspend_reason` | TEXT | NULL | 封禁原因 |
-| `suspend_until` | TIMESTAMPTZ | NULL | 临时封禁到期时间（null 表示永久封禁或非封禁状态） |
+| `status_reason` | TEXT | NULL | 状态变更原因（`reject`/`suspend`/`ban`/`close` 操作时写入，`approve`/`unsuspend` 时清空；适用于 `rejected`、`suspended`、`permanently_banned`、`closed` 状态） |
+| `suspend_until` | TIMESTAMPTZ | NULL | 临时封禁到期时间（仅 `suspended` 状态时有值，其他状态为 `null`） |
+| `member_count` | INTEGER | DEFAULT 0, NOT NULL | 成员数冗余计数，加入/退出时由服务层维护 |
 
 ### 4.2 新增 admin_actions 表（管理操作审计）
 
@@ -117,7 +180,7 @@ ALTER TABLE bars ALTER COLUMN status SET DEFAULT 'pending_review';
 | `metadata` | JSONB | NULL | 额外信息（如封禁时长） |
 | `created_at` | TIMESTAMPTZ | DEFAULT NOW() | 操作时间 |
 
-**`action` 枚举值**：`approve_bar`、`reject_bar`、`suspend_bar`、`unsuspend_bar`、`ban_bar`、`close_bar`。
+**`action` 枚举值**：`approve`、`reject`、`suspend`、`unsuspend`、`ban`、`close`。
 
 > PRE_PHASE3 中将扩展 `target_type` 支持 `post` / `reply`，并新增 `hide_post`、`hide_reply` 等操作类型。
 
@@ -126,8 +189,8 @@ ALTER TABLE bars ALTER COLUMN status SET DEFAULT 'pending_review';
 ### 4.3 索引补充
 
 ```sql
--- 吧列表查询（仅展示 active 状态）
-CREATE INDEX idx_bars_status_created_at ON bars (status, created_at);
+-- 吧列表查询（仅展示 active 状态，按 member_count 倒序）
+CREATE INDEX idx_bars_status_member_count ON bars (status, member_count DESC, created_at DESC);
 -- 用户创建的吧查询
 CREATE INDEX idx_bars_created_by ON bars (created_by, created_at);
 -- 用户帖子查询（个人中心）
@@ -135,6 +198,20 @@ CREATE INDEX idx_posts_author_id ON posts (author_id, created_at);
 -- 用户回复查询（个人中心）
 CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 ```
+
+### 4.4 bar_members 表（已有，第二阶段扩展使用）
+
+`bar_members` 表在第一阶段已创建（吧创建时自动插入 `owner` 记录），第二阶段加入/退出吧功能将正式使用该表，无需新增列，补充以下索引：
+
+```sql
+-- 用户在某吧的成员记录快速查找（加入/退出、memberRole 查询时使用）
+-- 第一阶段 Entity 已定义 UNIQUE(bar_id, user_id)，确认同步至数据库：
+CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_id, user_id);
+-- 用户已加入的吧列表查询（个人中心 /profile/bars）
+-- 第一阶段已建 bar_members(user_id, joined_at)，确认存在即可
+```
+
+> `member_count` 字段在加入吧（`JOIN`）时 +1，退出吧（`LEAVE`）时 -1，由 Service 层在同一事务内维护，使吧列表可直接读取成员数而无需额外 COUNT 查询（避免批量展示时的聚合开销）。**注意**：吧创建时，Service 层在同一事务内插入创建者的 `bar_members`（`role = 'owner'`）记录并同时将 `member_count` 初始化为 `1`；若遗漏此步骤，新吧的成员数将显示为 `0`（与 `DEFAULT 0` 冲突）。后续如需高精度一致性，可改为数据库触发器实现。
 
 ---
 
@@ -144,9 +221,26 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 
 | 方法 | 路径 | 认证 | 说明 |
 |------|------|------|------|
+| GET | `/api/bars` | 否 | 获取吧列表（仅 `active` 状态，cursor 分页） |
+| GET | `/api/bars/:id` | 否（登录用户返回额外字段） | 获取吧详情 |
 | POST | `/api/bars` | 是（登录用户） | 提交创建吧申请 |
 | POST | `/api/bars/:id/join` | 是 | 加入吧 |
 | POST | `/api/bars/:id/leave` | 是 | 退出吧（吧主不可退出） |
+
+#### `GET /api/bars` — 获取吧列表（第二阶段变更）
+
+- **第二阶段变更**：仅返回 `status = 'active'` 的吧（之前无此过滤约束）。
+- 执行查询前，对 `suspended` 且已到期的吧自动解封（见 §3.7）。
+- 每条吧记录响应新增 `memberCount`；已登录用户新增 `isMember` 字段。
+- 默认按成员数（`memberCount`）倒序排列，成员数相同时按创建时间倒序。
+- 分页参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
+
+#### `GET /api/bars/:id` — 获取吧详情（第二阶段变更）
+
+- `pending_review` 和 `rejected` 状态的吧仅创建者本人可访问；非创建者请求时返回 `404 Not Found`（对外不暴露这两种状态的存在）。
+- `suspended`、`permanently_banned`、`closed` 状态的吧对所有人可访问（已加入的成员需能查看历史内容），不返回 `404`。
+- 若吧为临时封禁且已到期，服务端自动解封后再返回（见 §3.7）。
+- 响应新增字段：`memberCount`、`isMember`、`memberRole`、`suspendUntil`、`statusReason`（见 §3.5）。
 
 #### `POST /api/bars` — 提交创建吧申请
 
@@ -169,22 +263,25 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 | avatarUrl | string | 否 | 合法 URL |
 
 成功响应（201）：返回创建的吧对象（status=`pending_review`）。
+失败响应：`400` 必填字段缺失或字段校验失败；`409` 吧名已存在（错误码 `BAR_NAME_DUPLICATE`）。
 
 #### `POST /api/bars/:id/join` — 加入吧
 
-前置校验：吧状态必须为 `active`；用户未加入过该吧。
+前置校验：先执行封禁到期自动解封检查（见 §3.7）；吧状态必须为 `active` 或 `suspended`；用户未加入过该吧。
 成功响应（201）：返回新建的成员记录。
+失败响应：`404` 吧不存在（`pending_review`/`rejected` 状态的吧对非创建者同样返回 `404`）；`409` 已是成员或吧状态不允许加入（错误码 `BAR_NOT_JOINABLE`）。
 
 #### `POST /api/bars/:id/leave` — 退出吧
 
-前置校验：用户已加入该吧；吧主不可退出（需先转让吧主）。
+前置校验：先执行封禁到期自动解封检查（见 §3.7）；用户已加入该吧；吧主不可退出（需先转让吧主）；吧状态为 `active` 或 `suspended`（`permanently_banned`/`closed` 状态的吧不允许退出）。
 成功响应（200）：返回操作结果。
+失败响应：`404` 吧不存在（`pending_review`/`rejected` 状态的吧对非创建者同样返回 `404`）或用户未加入；`403` 吧主不可退出；`409` 吧状态不允许退出（错误码 `BAR_NOT_LEAVABLE`）。
 
 ### 5.2 管理员接口
 
 | 方法 | 路径 | 认证 | 说明 |
 |------|------|------|------|
-| GET | `/api/admin/bars/pending` | 是（admin） | 待审核吧列表 |
+| GET | `/api/admin/bars` | 是（admin） | 全量吧列表（支持按状态过滤，cursor 分页） |
 | POST | `/api/admin/bars/:id/approve` | 是（admin） | 审核通过吧 |
 | POST | `/api/admin/bars/:id/reject` | 是（admin） | 审核拒绝吧 |
 | POST | `/api/admin/bars/:id/suspend` | 是（admin） | 临时封禁吧 |
@@ -193,9 +290,24 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 | POST | `/api/admin/bars/:id/close` | 是（admin） | 关闭吧 |
 | GET | `/api/admin/actions` | 是（admin） | 管理操作审计日志（cursor 分页） |
 
+#### `GET /api/admin/bars` — 全量吧列表
+
+用于管理员后台"吧管理"页面（`/admin/bars`），支持按状态过滤和分页。待审核吧列表使用 `?status=pending_review` 参数过滤即可，无需单独端点。
+
+查询参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `status` | string | 可选，按状态过滤（不传则返回所有状态）。待审核列表使用 `pending_review` |
+| `cursor` | string | 分页游标 |
+| `limit` | integer | 每页条数，默认 20，最大 100 |
+
+响应字段：每条吧包含 `id`、`name`、`status`、`statusReason`、`suspendUntil`、`memberCount`、`createdBy`（创建者用户信息摘要）、`createdAt`、`updatedAt`。按 `createdAt` 倒序排列。
+
 #### `POST /api/admin/bars/:id/approve` — 审核通过
 
 将吧状态从 `pending_review` 变更为 `active`，记录审计日志。
+失败响应：`404` 吧不存在；`409` 吧当前状态不允许此操作（非 `pending_review`）。
 
 #### `POST /api/admin/bars/:id/reject` — 审核拒绝
 
@@ -203,7 +315,8 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 ```json
 { "reason": "拒绝原因说明" }
 ```
-将吧状态变更为 `rejected`，记录拒绝原因和审计日志。
+将吧状态变更为 `rejected`，拒绝原因写入 `bars.status_reason`，记录审计日志。
+失败响应：`400` 未提供拒绝原因；`404` 吧不存在；`409` 吧当前状态不允许此操作（非 `pending_review`）。
 
 #### `POST /api/admin/bars/:id/suspend` — 临时封禁
 
@@ -219,12 +332,21 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 | reason | string | 封禁原因 |
 | duration | number | 封禁时长（小时），最小 1，最大 720（30 天） |
 
+失败响应：`400` 未提供原因或时长；`404` 吧不存在；`409` 吧当前状态不允许此操作（非 `active` 或 `suspended`）。
+
+#### `POST /api/admin/bars/:id/unsuspend` — 解封吧
+
+将吧状态从 `suspended` 恢复为 `active`，清空 `status_reason` 和 `suspend_until`，记录审计日志。
+失败响应：`404` 吧不存在；`409` 吧当前状态非 `suspended`。
+
 #### `POST /api/admin/bars/:id/ban` — 永久封禁
 
 请求体：
 ```json
 { "reason": "永久封禁原因" }
 ```
+将吧状态变更为 `permanently_banned`，记录审计日志。
+失败响应：`400` 未提供原因；`404` 吧不存在；`409` 吧当前状态不允许此操作（非 `active` 或 `suspended`）。
 
 #### `POST /api/admin/bars/:id/close` — 关闭吧
 
@@ -232,6 +354,30 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 ```json
 { "reason": "关闭原因" }
 ```
+将吧状态变更为 `closed`，记录审计日志。
+失败响应：`400` 未提供原因；`404` 吧不存在；`409` 吧当前状态不允许此操作（非 `active` 或 `suspended`）。
+
+#### `GET /api/admin/actions` — 审计日志列表
+
+按操作时间倒序返回管理员操作审计日志，支持 cursor 分页。第二阶段不支持复杂过滤和搜索，仅提供基础分页浏览。
+
+查询参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `cursor` | string | 分页游标 |
+| `limit` | integer | 每页条数，默认 20，最大 100 |
+
+响应字段：每条日志包含 `id`、`action`（操作类型，如 `approve`/`reject`/`suspend`/`unsuspend`/`ban`/`close`）、`targetType`（目标类型，如 `bar`）、`targetId`、`targetName`（吧名）、`adminId`、`adminNickname`、`reason`（操作原因，如有）、`createdAt`。
+
+#### 管理员接口公共校验说明
+
+- 所有针对特定吧（`:id`）的管理员接口在执行前先验证目标吧是否存在，不存在则返回 `404 Not Found`。
+- 所有针对特定吧（`:id`）的管理员接口在执行业务逻辑前须先执行封禁到期自动解封检查（参见 §3.7），确保操作基于最新状态。`GET /api/admin/bars` 列表端点无需执行此检查——列表仅展示当前 DB 状态，到期吧会在下次被单独访问或操作时自动解封。
+- 状态迁移不合法时（参见 §3.6）返回 `409 Conflict`，错误体：`{ "error": { "code": "INVALID_STATE_TRANSITION", "message": "..." } }`。
+- `reject`、`suspend`、`ban`、`close` 操作中的 `reason` 字段写入 `bars.status_reason`，`approve` 和 `unsuspend` 时清空该字段。
+- 当吧从 `suspended` 状态迁移至其他状态时（`unsuspend`/`ban`/`close` 及 §3.7 Lazy Eval 自动解封），同时清空 `suspend_until`，确保满足 §4.1 的字段约束（该字段仅 `suspended` 状态时有值）。
+- 所有操作记录到 `admin_actions` 审计表，`admin_id` 取当前登录用户 ID。
 
 ### 5.3 个人中心接口
 
@@ -243,21 +389,50 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 | GET | `/api/users/me/created-bars` | 是 | 我创建的吧列表（含所有状态） |
 | PATCH | `/api/users/me/profile` | 是 | 编辑个人资料 |
 
+#### `GET /api/users/me/posts` — 我的帖子列表
+
+按创建时间倒序返回当前用户发布的帖子，支持 cursor 分页。
+
+查询参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
+响应字段：每条帖子包含 `id`、`title`、`barId`、`barName`、`createdAt` 等基本信息。
+
+#### `GET /api/users/me/replies` — 我的回复列表
+
+按创建时间倒序返回当前用户发布的回复，支持 cursor 分页。
+
+查询参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
+响应字段：每条回复包含 `id`、`content`（截断预览）、`postId`、`postTitle`、`barName`、`createdAt` 等基本信息。
+
+#### `GET /api/users/me/bars` — 我加入的吧列表
+
+按加入时间倒序返回当前用户已加入的吧，支持 cursor 分页。执行查询前，对 `suspended` 且已到期的吧自动解封（见 §3.7），确保返回的 `status` 字段反映最新状态。
+
+查询参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
+响应字段：每条吧包含 `id`、`name`、`description`、`status`、`statusReason`（状态变更原因）、`suspendUntil`（临时封禁到期时间）、`memberCount`、`joinedAt` 等基本信息。含所有状态的吧（包括 `suspended`、`permanently_banned`、`closed`），附带状态标识。
+
+#### `GET /api/users/me/created-bars` — 我创建的吧列表
+
+按创建时间倒序返回当前用户创建的吧，支持 cursor 分页。执行查询前，对 `suspended` 且已到期的吧自动解封（见 §3.7），确保返回的 `status` 字段反映最新状态。包含所有状态的吧（`pending_review`、`active`、`rejected`、`suspended`、`permanently_banned`、`closed`）。
+
+查询参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
+响应字段：每条吧包含 `id`、`name`、`status`、`statusReason`（状态变更原因，如被拒绝/封禁/关闭原因）、`suspendUntil`（临时封禁到期时间）、`createdAt` 等基本信息。
+
 #### `PATCH /api/users/me/profile` — 编辑个人资料
 
 请求体：
 ```json
 {
   "nickname": "新昵称",
-  "avatarUrl": "https://...",
   "bio": "个人签名"
 }
 ```
 | 字段 | 类型 | 必填 | 校验 |
 |------|------|------|------|
 | nickname | string | 否 | 2-50 字符 |
-| avatarUrl | string | 否 | 合法 URL |
 | bio | string | 否 | 最长 200 字符 |
+
+成功响应（200）：返回更新后的用户资料对象。
+失败响应：`400` 字段校验失败（如昵称过短/过长、签名超长）。
 
 ---
 
@@ -268,8 +443,10 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 | 页面 | 路由 | 渲染方式 | 说明 |
 |------|------|---------|------|
 | 创建吧 | `/create-bar` | CSR（需登录） | 吧创建申请表单 |
-| 个人中心 | `/profile` | CSR（需登录） | 个人中心首页（我的帖子/回复/吧） |
-| 个人资料编辑 | `/profile/edit` | CSR（需登录） | 编辑昵称、头像、签名 |
+| 个人中心 | `/profile` | CSR（需登录） | 个人中心首页（我的帖子，默认页签） |
+| 我的回复 | `/profile/replies` | CSR（需登录） | 我的回复列表（cursor 分页） |
+| 我的吧 | `/profile/bars` | CSR（需登录） | 已加入吧列表（cursor 分页） |
+| 个人资料编辑 | `/profile/edit` | CSR（需登录） | 编辑昵称、签名（头像编辑在 PRE_PHASE3） |
 | 我创建的吧 | `/profile/created-bars` | CSR（需登录） | 查看创建的吧及审核状态 |
 | 管理员后台 | `/admin` | CSR（需 admin） | 管理员仪表盘入口 |
 | 吧审核列表 | `/admin/bars/pending` | CSR（需 admin） | 待审核吧列表与审核操作 |
@@ -290,9 +467,13 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 |------|------|
 | `components/bar/BarStatusBadge.tsx` | 吧状态标识组件 |
 | `components/bar/JoinBarButton.tsx` | 加入/退出吧按钮 |
+| `components/bar/BarCreateForm.tsx` | 创建吧申请表单（含字段校验与提交） |
+| `components/bar/CreatedBarCard.tsx` | 我创建的吧卡片（展示审核状态与拒绝原因） |
 | `components/profile/ProfileNav.tsx` | 个人中心侧边导航 |
 | `components/admin/AdminNav.tsx` | 管理后台导航 |
 | `components/admin/BarReviewCard.tsx` | 待审核吧卡片（含通过/拒绝操作） |
+| `components/admin/AdminBarTable.tsx` | 管理后台吧列表表格（含状态过滤与操作入口） |
+| `components/admin/SuspendBanModal.tsx` | 封禁/关闭弹窗（含原因填写与时长选择） |
 
 ---
 
@@ -321,12 +502,12 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 - 不实现回复增强：楼中楼回复、引用回复、楼主标识（移入 PRE_PHASE3）。
 - 不实现社区治理扩展：吧资料编辑、角色管理、吧主转让、内容隐藏（移入 PRE_PHASE3）。
 - 不实现帖子/回复删除（移入 PRE_PHASE3）。
+- 不实现头像编辑（头像 URL 填写与预签名上传链路均移入 PRE_PHASE3）。
 - 不实现 Markdown 渲染与媒体上传（移入 PRE_PHASE3）。
 - 不实现通知与提醒能力（@提醒、消息中心）。
 - 不实现全局搜索能力。
 - 不实现接口限流。
 - 不实现帖子/回复二次编辑。
-- 不实现编辑历史记录。
 - 不实现用户封禁（帖吧级/全站级用户封禁）。
 
 ---
@@ -340,3 +521,297 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 - 用户可加入/退出吧，登录后首页展示"我的吧"。
 - 个人中心主要页面可正常浏览。
 - 被封禁/关闭的吧正确展示只读状态，禁止写操作。
+
+---
+
+## 10. 用户操作流程
+
+本节描述第二阶段各核心场景下用户在前端页面的完整操作步骤，用于指导 UI 交互设计与接口调用时序。
+
+### 10.1 创建吧流程
+
+**前提**：用户已登录。
+
+```
+用户点击导航栏"创建吧"
+        │
+        ▼
+  跳转 /create-bar
+        │
+        ▼
+  填写创建吧表单
+  ┌─────────────────────────────┐
+  │ 吧名（必填）                 │
+  │ 吧描述（必填）               │
+  │ 吧分类（选填）               │
+  │ 吧规（选填）                 │
+  │ 吧头像 URL（选填）           │
+  └─────────────────────────────┘
+        │
+        ▼
+  点击"提交申请"
+        │
+   ┌────┴────┐
+本地校验失败   校验通过
+   │          │
+字段旁提示   POST /api/bars
+错误信息       │
+          ┌───┴───┐
+         201      4xx
+          │        │
+    提示"已提交   展示错误提示
+    等待审核"    409→"吧名重复"
+          │
+          ▼
+    跳转 /profile/created-bars
+    可见新申请（状态：审核中）
+```
+
+**细节说明**：
+- 吧名查重在提交时由后端校验，前端不做实时查重请求（避免频繁调用）。
+- 表单提交期间按钮禁用，防止重复提交。
+- 创建成功后吧不出现在公开列表，仅在创建者的"我创建的吧"中可见。
+
+---
+
+### 10.2 管理员审核流程
+
+**前提**：管理员已登录。
+
+```
+管理员进入 /admin/bars/pending
+        │
+        ▼
+  查看待审核吧列表（分页）
+  每条显示：吧名、简介、申请人、申请时间
+        │
+        ▼
+  点击某条待审核吧，查看详情
+        │
+  ┌─────┴──────┐
+审核通过       审核拒绝
+  │              │
+点击"通过"    点击"拒绝"
+  │              │
+  ▼              ▼
+POST /api/     弹窗填写拒绝原因（必填）
+admin/bars       │
+/:id/approve   确认
+  │              │
+  ▼              ▼
+吧状态→active  POST /api/admin/bars/:id/reject
+  │              │
+  └──────┬───────┘
+         ▼
+    当前列表自动刷新
+    操作记录到审计日志
+
+创建者侧（异步感知）：
+  登录后查看 /profile/created-bars
+  可见吧状态变更为 active 或 rejected（附拒绝原因）
+```
+
+**细节说明**：
+- 拒绝原因为必填项，前端弹窗须校验不为空。
+- 管理员操作后当前页列表刷新（乐观更新或重新请求）。
+- 审核后状态改变是终态迁移（见 §3.6），不可在后台撤销。
+
+---
+
+### 10.3 加入与退出吧流程
+
+**前提**：用户已登录。
+
+**加入吧**：
+
+```
+用户浏览吧详情页 /bars/[id]
+        │
+  ┌─────┴──────────┐
+已加入（isMember=true）  未加入（isMember=false）
+  │                       │
+显示"退出吧"按钮          显示"加入吧"按钮
+                          │
+                    点击"加入吧"
+                          │
+                    POST /api/bars/:id/join
+                          │
+                   ┌──────┴──────┐
+                  201            4xx
+                   │              │
+            按钮切换为"退出吧"   409→"你已是该吧成员"
+            memberCount +1       409→"吧状态不允许加入"
+```
+
+**退出吧**：
+
+```
+用户在吧详情页点击"退出吧"
+        │
+        ▼
+  弹出确认对话框
+  "确认退出「吧名」？"
+        │
+   ┌────┴────┐
+  取消       确认
+   │          │
+  关闭弹窗  POST /api/bars/:id/leave
+              │
+         ┌────┼────────┐
+        200   403       409
+         │     │         │
+   按钮切换为  提示"你是  提示"该吧当前
+   "加入吧"   该吧吧主，  状态不允许
+   memberCount 无法退出，  退出"
+   -1         请先转让
+              吧主（功能
+              待开放）"
+```
+
+**细节说明**：
+- 退出操作需要确认弹窗防误操作。
+- 吧主的"退出吧"按钮仍展示，但点击后提示转让说明（吧主转让在 PRE_PHASE3 实现）。
+- `suspended` 状态的吧：加入和退出按钮均正常展示可操作。
+- `permanently_banned` 或 `closed` 状态的吧：加入和退出按钮均禁用，已加入的成员仅可浏览历史内容。
+
+---
+
+### 10.4 个人中心操作流程
+
+**前提**：用户已登录。
+
+**浏览个人中心**：
+
+```
+点击导航栏"个人中心"
+        │
+        ▼
+  跳转 /profile
+  展示"我的帖子"列表（默认页签）
+        │
+  通过 ProfileNav 切换页签：
+  ┌──────────────────────────────────┐
+  │  我的帖子  /profile              │
+  │  我的回复  /profile/replies      │
+  │  我的吧    /profile/bars         │
+  │  我创建的吧 /profile/created-bars │
+  └──────────────────────────────────┘
+        │
+  各页签调用对应接口（cursor 分页）
+  GET /api/users/me/posts
+  GET /api/users/me/replies
+  GET /api/users/me/bars
+  GET /api/users/me/created-bars
+```
+
+**编辑个人资料**：
+
+```
+用户在 /profile 点击"编辑资料"
+        │
+        ▼
+  跳转 /profile/edit
+  表单预填：昵称、个人签名
+        │
+        ▼
+  修改内容后点击"保存"
+        │
+   ┌────┴────┐
+本地校验失败   校验通过
+   │          │
+字段提示错误  PATCH /api/users/me/profile
+              │
+         ┌────┴────┐
+        200         400
+         │           │
+    跳转 /profile    展示字段校验错误
+    展示更新后资料
+```
+
+**细节说明**：
+- 头像编辑（URL 填写与预签名上传）整体移入 PRE_PHASE3，第二阶段个人资料编辑仅支持修改昵称和签名。
+- 个人签名限长 200 字符，前端展示实时字符计数。
+- 所有字段均为选填，只提交有修改的字段（PATCH 语义）。
+
+---
+
+### 10.5 管理员治理操作流程
+
+**前提**：管理员已登录。
+
+**封禁/关闭吧**：
+
+```
+管理员进入 /admin/bars
+        │
+        ▼
+  查看全量吧列表（支持按状态过滤）
+        │
+        ▼
+  找到目标吧，点击"操作"入口
+        │
+   ┌────┼──────────────────┐
+   │    │                  │
+临时封禁  永久封禁          关闭吧
+   │    │                  │
+   ▼    ▼                  ▼
+弹窗（SuspendBanModal）    弹窗填写关闭原因（必填）
+填写原因（必填）               │
+填写时长小时数（1-720）         ▼
+   │    │              POST /api/admin/bars/:id/close
+   │    └→ POST /api/admin/bars/:id/ban
+   └──→ POST /api/admin/bars/:id/suspend
+        │
+        ▼
+   操作成功后列表刷新，吧状态更新
+   操作记录到审计日志
+```
+
+**解封吧**：
+
+```
+管理员在 /admin/bars 筛选 "suspended" 状态
+        │
+        ▼
+  点击目标吧的"解封"操作
+        │
+        ▼
+  POST /api/admin/bars/:id/unsuspend
+        │
+   ┌────┴────┐
+  200         409
+   │           │
+吧恢复 active  重新 GET 吧详情，判断当前状态
+列表刷新       │
+          ┌───┴───┐
+        active   其他状态
+          │         │
+   提示"该吧封禁已  提示"当前吧状态
+   自动到期，无需   不支持该操作，
+   手动解封，请     请刷新后重试"
+   刷新查看最新
+   状态"
+```
+
+**查看审计日志**：
+
+```
+管理员进入 /admin/actions
+        │
+        ▼
+  审计日志列表（按时间倒序，cursor 分页）
+  每条日志显示：
+  ┌──────────────────────────────────────┐
+  │ 操作类型  目标（吧名/ID）  操作人     │
+  │ 操作时间  原因/备注                   │
+  └──────────────────────────────────────┘
+        │
+  滚动到底部或点击"加载更多"
+        │
+  GET /api/admin/actions?cursor=...
+```
+
+**细节说明**：
+- `SuspendBanModal` 针对临时封禁展示时长输入（小时），永久封禁/关闭不展示时长。
+- 所有弹窗操作均有加载状态和错误回显。
+- `409 INVALID_STATE_TRANSITION` 错误时前端通常提示"当前吧状态不支持该操作，请刷新后重试"；但在 `unsuspend` 操作收到 `409` 时，应区分场景：若返回的吧状态已为 `active`（封禁已自动到期），则提示"该吧封禁已自动到期，无需手动解封，请刷新查看最新状态"（参见 §3.7）。
