@@ -8,7 +8,7 @@ import useAuthStore from '@/lib/auth';
 import type { User } from '@/types';
 
 interface RegisterResponse {
-  token: string;
+  accessToken: string;
   user: User;
 }
 
@@ -31,7 +31,7 @@ export default function RegisterPage() {
         password,
         nickname,
       });
-      login(res.data.token, res.data.user);
+      login(res.data.accessToken, res.data.user);
       router.push('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : '注册失败');

@@ -8,7 +8,7 @@ import useAuthStore from '@/lib/auth';
 import type { User } from '@/types';
 
 interface LoginResponse {
-  token: string;
+  accessToken: string;
   user: User;
 }
 
@@ -29,7 +29,7 @@ export default function LoginPage() {
         email,
         password,
       });
-      login(res.data.token, res.data.user);
+      login(res.data.accessToken, res.data.user);
       router.push('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
