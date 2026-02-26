@@ -37,7 +37,7 @@
 
 ### 2.3 加入/退出吧与首页展示
 - 加入/退出吧：用户可主动加入或退出吧，沉淀"我的吧"数据。吧主不可退出（需先转让）。
-- 加入吧前置校验：吧状态必须为 `active`。
+- 加入吧前置校验：吧状态必须为 `active` 或 `suspended`（临时封禁期间仍允许加入）。
 - 首页"我的吧"展示：用户登录后，在首页展示其已加入吧列表。
 
 ### 2.4 个人中心
@@ -62,7 +62,7 @@
 | `permanently_banned` | ✅（只读） | ❌ | ❌ | ❌ | ❌ |
 | `closed` | ✅（只读） | ❌ | ❌ | ❌ | ❌ |
 
-- 已加入 `suspended` 吧的用户可继续加入或退出；已加入 `permanently_banned` 或 `closed` 吧的用户不可再加入或退出，但仍可在"我的吧"列表中看到该吧（附带状态标识）并进入查看历史内容。
+- `suspended` 状态的吧：新用户可加入，已有成员可退出。`permanently_banned` 或 `closed` 状态的吧：不允许任何人加入或退出，已有成员仍可在"我的吧"列表中看到该吧（附带状态标识）并进入查看历史内容。
 - 被封禁/关闭的吧详情页顶部展示醒目的状态提示（如"该吧已被封禁"）。
 - 在被封禁/关闭的吧内，发帖和回复按钮禁用并展示提示。
 
@@ -98,7 +98,7 @@
 |------|------|------|
 | `memberCount` | integer | 吧成员数 |
 | `isMember` | boolean \| null | 已登录时返回是否已加入，未登录返回 `null` |
-| `memberRole` | string \| null | 已加入时返回角色（`member` / `moderator` / `owner`），否则 `null` |
+| `memberRole` | string \| null | 已加入时返回角色（`member` / `owner`），否则 `null`。`moderator` 角色在 PRE_PHASE3 启用，第二阶段仅有 `member` 和 `owner` |
 | `suspendUntil` | ISO8601 \| null | 临时封禁时返回到期时间，其他状态为 `null` |
 | `statusReason` | string \| null | 封禁/关闭原因（`suspended`/`permanently_banned`/`closed` 时有值），其他状态为 `null` |
 
@@ -259,13 +259,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 
 前置校验：吧状态必须为 `active` 或 `suspended`；用户未加入过该吧。
 成功响应（201）：返回新建的成员记录。
-失败响应：`404` 吧不存在；`409` 已是成员或吧状态不允许加入（错误码 `BAR_NOT_JOINABLE`）。
+失败响应：`404` 吧不存在（`pending_review`/`rejected` 状态的吧对非创建者同样返回 `404`）；`409` 已是成员或吧状态不允许加入（错误码 `BAR_NOT_JOINABLE`）。
 
 #### `POST /api/bars/:id/leave` — 退出吧
 
 前置校验：用户已加入该吧；吧主不可退出（需先转让吧主）；吧状态为 `active` 或 `suspended`（`permanently_banned`/`closed` 状态的吧不允许退出）。
 成功响应（200）：返回操作结果。
-失败响应：`404` 吧不存在或用户未加入；`403` 吧主不可退出；`409` 吧状态不允许退出（错误码 `BAR_NOT_LEAVABLE`）。
+失败响应：`404` 吧不存在（`pending_review`/`rejected` 状态的吧对非创建者同样返回 `404`）或用户未加入；`403` 吧主不可退出；`409` 吧状态不允许退出（错误码 `BAR_NOT_LEAVABLE`）。
 
 ### 5.2 管理员接口
 
@@ -319,6 +319,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 |------|------|------|
 | reason | string | 封禁原因 |
 | duration | number | 封禁时长（小时），最小 1，最大 720（30 天） |
+
+失败响应：`400` 未提供原因或时长；`404` 吧不存在；`409` 吧当前状态不允许此操作（非 `active` 或 `suspended`）。
 
 #### `POST /api/admin/bars/:id/unsuspend` — 解封吧
 
@@ -562,7 +564,7 @@ admin/bars       │
 
 ### 10.3 加入与退出吧流程
 
-**前提**：用户已登录，吧状态为 `active`。
+**前提**：用户已登录。
 
 **加入吧**：
 
@@ -745,4 +747,4 @@ admin/bars       │
 **细节说明**：
 - `SuspendBanModal` 针对临时封禁展示时长输入（小时），永久封禁/关闭不展示时长。
 - 所有弹窗操作均有加载状态和错误回显。
-- `409 INVALID_STATE_TRANSITION` 错误时前端提示"当前吧状态不支持该操作，请刷新后重试"。
+- `409 INVALID_STATE_TRANSITION` 错误时前端通常提示"当前吧状态不支持该操作，请刷新后重试"；但在 `unsuspend` 操作收到 `409` 时，应区分场景：若返回的吧状态已为 `active`（封禁已自动到期），则提示"该吧封禁已自动到期，无需手动解封，请刷新查看最新状态"（参见 §3.7）。
