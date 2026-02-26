@@ -142,12 +142,12 @@ jobs:
           POST_RESPONSE=$(curl -fsS -X POST "$API_URL/posts" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $TOKEN" \
-            -d "{\"barId\":\"$TEST_BAR_ID\",\"title\":\"Backend E2E Post\",\"content\":\"Backend E2E Content\"}")
+            -d "{\"barId\":\"$TEST_BAR_ID\",\"title\":\"Backend E2E Post\",\"content\":\"Backend E2E Content\",\"contentType\":\"plaintext\"}")
           POST_ID=$(echo "$POST_RESPONSE" | jq -r '.data.id')
           curl -fsS -X POST "$API_URL/posts/$POST_ID/replies" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $TOKEN" \
-            -d '{"content":"Backend E2E Reply"}' >/dev/null
+            -d '{"content":"Backend E2E Reply","contentType":"plaintext"}' >/dev/null
 
   frontend-e2e:
     runs-on: ubuntu-latest
