@@ -34,6 +34,7 @@
 
 #### 2.2.3 管理操作审计
 - 所有管理员对吧的审核、封禁、关闭操作记录到 `admin_actions` 审计表。
+- 吧主/版主对帖子和回复的隐藏操作同样记录到 `admin_actions` 审计表。
 
 ### 2.3 回复能力增强
 - 二级回复（楼中楼）：开放 `parent_reply_id` 能力，支持对指定回复进行回复。
@@ -239,6 +240,8 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 | POST | `/api/bars/:id/leave` | 是 | 退出吧（吧主不可退出） |
 | PATCH | `/api/bars/:id/members/:userId/role` | 是（吧主） | 修改吧成员角色（任命/撤销版主） |
 | POST | `/api/bars/:id/transfer` | 是（吧主） | 转让吧主身份 |
+| POST | `/api/posts/:id/hide` | 是（吧主/版主） | 隐藏帖子（记录审计日志） |
+| POST | `/api/replies/:id/hide` | 是（吧主/版主） | 隐藏回复（记录审计日志） |
 
 #### `POST /api/bars` — 提交创建吧申请
 
@@ -273,7 +276,7 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 
 #### `POST /api/bars/:id/leave` — 退出吧
 
-前置校验：用户已加入该吧；吧主不可退出（需先转让吧主）。
+前置校验：用户已加入该吧；吧主不可退出（需先转让吧主）。退出吧为两步操作：先转让吧主身份，再以普通角色退出。
 成功响应（200）：返回操作结果。
 
 #### `PATCH /api/bars/:id/members/:userId/role` — 修改成员角色
@@ -329,7 +332,7 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | reason | string | 封禁原因 |
-| duration | number | 封禁时长（小时） |
+| duration | number | 封禁时长（小时），最小 1，最大 720（30 天） |
 
 #### `POST /api/admin/bars/:id/ban` — 永久封禁
 
@@ -448,7 +451,7 @@ CREATE INDEX idx_replies_author_id ON replies (author_id, created_at);
   "editedAt": "2025-01-01T00:00:00.000Z"
 }
 ```
-- `isLiked` / `isFavorited` 仅在用户已登录时返回，未登录时为 `false`。
+- `isLiked` / `isFavorited`：已登录用户返回实际状态（`true` / `false`），未登录时返回 `null`（前端据此区分"未登录"与"未点赞"）。
 
 回复列表中新增字段：
 ```json
