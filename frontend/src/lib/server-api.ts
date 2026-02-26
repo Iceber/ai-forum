@@ -19,11 +19,18 @@ export async function fetchApi<T>(path: string): Promise<ApiResponse<T> | null> 
   for (const base of API_BASES) {
     try {
       const res = await fetch(`${base}${path}`, { cache: 'no-store' });
-      if (!res.ok) continue;
+      if (!res.ok) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(
+            `Server API fetch returned ${res.status} for ${base}${path}`,
+          );
+        }
+        continue;
+      }
       return (await res.json()) as ApiResponse<T>;
-    } catch {
+    } catch (error) {
       if (process.env.NODE_ENV !== 'production') {
-        console.warn(`Server API fetch failed: ${base}${path}`);
+        console.warn(`Server API fetch failed: ${base}${path}`, error);
       }
     }
   }
