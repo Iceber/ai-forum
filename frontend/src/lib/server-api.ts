@@ -1,12 +1,13 @@
 import type { ApiResponse } from '@/types';
 
-const DEFAULT_API_URL = process.env.API_DEFAULT_URL ?? 'http://localhost:3001';
+const API_DEFAULT_URL = process.env.API_DEFAULT_URL ?? 'http://localhost:3001';
 
+// Priority order: API_INTERNAL_URL (Docker) → NEXT_PUBLIC_API_URL (browser) → API_DEFAULT_URL (fallback).
 // Environment variables are read at module load; base list is static for the runtime.
 const API_BASES_RAW = [
   process.env.API_INTERNAL_URL,
   process.env.NEXT_PUBLIC_API_URL,
-  DEFAULT_API_URL,
+  API_DEFAULT_URL,
 ].filter(Boolean);
 const API_BASES = Array.from(new Set(API_BASES_RAW));
 
