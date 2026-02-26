@@ -97,11 +97,14 @@ export class BarsService {
 
     // Attach isMember for logged-in users
     let memberBarIds: Set<string> | null = null;
-    if (userId) {
-      const memberships = await this.barMembersRepository.find({
-        where: { userId },
-        select: ['barId'],
-      });
+    if (userId && items.length > 0) {
+      const barIds = items.map((b) => b.id);
+      const memberships = await this.barMembersRepository
+        .createQueryBuilder('bm')
+        .select('bm.bar_id', 'barId')
+        .where('bm.user_id = :userId', { userId })
+        .andWhere('bm.bar_id IN (:...barIds)', { barIds })
+        .getRawMany();
       memberBarIds = new Set(memberships.map((m) => m.barId));
     }
 
@@ -137,11 +140,12 @@ export class BarsService {
       throw new NotFoundException('Bar not found');
     }
 
-    // Load creator info
+    // Reload with creator relation
     const barWithCreator = await this.barsRepository.findOne({
       where: { id },
       relations: ['createdBy'],
     });
+    if (!barWithCreator) throw new NotFoundException('Bar not found');
 
     let isMember: boolean | null = null;
     let memberRole: string | null = null;
@@ -154,26 +158,26 @@ export class BarsService {
     }
 
     return {
-      id: barWithCreator!.id,
-      name: barWithCreator!.name,
-      description: barWithCreator!.description,
-      avatarUrl: barWithCreator!.avatarUrl,
-      rules: barWithCreator!.rules,
-      category: barWithCreator!.category,
-      status: barWithCreator!.status,
-      statusReason: barWithCreator!.statusReason,
-      suspendUntil: barWithCreator!.suspendUntil,
-      memberCount: barWithCreator!.memberCount,
+      id: barWithCreator.id,
+      name: barWithCreator.name,
+      description: barWithCreator.description,
+      avatarUrl: barWithCreator.avatarUrl,
+      rules: barWithCreator.rules,
+      category: barWithCreator.category,
+      status: barWithCreator.status,
+      statusReason: barWithCreator.statusReason,
+      suspendUntil: barWithCreator.suspendUntil,
+      memberCount: barWithCreator.memberCount,
       isMember,
       memberRole,
-      createdBy: barWithCreator!.createdBy
+      createdBy: barWithCreator.createdBy
         ? {
-            id: barWithCreator!.createdBy.id,
-            nickname: barWithCreator!.createdBy.nickname,
+            id: barWithCreator.createdBy.id,
+            nickname: barWithCreator.createdBy.nickname,
           }
         : null,
-      createdAt: barWithCreator!.createdAt,
-      updatedAt: barWithCreator!.updatedAt,
+      createdAt: barWithCreator.createdAt,
+      updatedAt: barWithCreator.updatedAt,
     };
   }
 
@@ -245,7 +249,7 @@ export class BarsService {
     if (existing) {
       throw new ConflictException({
         message: 'Already a member of this bar',
-        error: 'BAR_NOT_JOINABLE',
+        error: 'ALREADY_MEMBER',
       });
     }
 
