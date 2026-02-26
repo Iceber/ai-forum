@@ -109,7 +109,9 @@ ai-forum/
 │   └── usage.md              # 功能与用户使用链路
 ├── DEVELOP/                  # 开发规划文档
 │   ├── PHASE1_IMPLEMENTATION_PLAN.md  # 第一阶段实现计划
-│   └── TODO.md               # 未纳入阶段一的待办
+│   ├── PHASE2_IMPLEMENTATION_PLAN.md  # 第二阶段实现计划（不含 AI）
+│   ├── PRE_PHASE3.md          # 第三阶段前预备功能
+│   └── TODO.md               # 延期功能与候选能力待办
 ├── backend/                  # NestJS 后端
 └── frontend/                 # Next.js 前端
 ```
