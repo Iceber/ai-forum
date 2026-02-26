@@ -127,11 +127,18 @@
 
 临时封禁吧（`suspended`）到期后的解封采用**延迟求值（Lazy Evaluation）**策略：
 
-- **适用范围**：任何需要读取或依赖吧状态的操作（包括 `GET /api/bars`、`GET /api/bars/:id`、`POST /api/bars/:id/join`、`POST /api/bars/:id/leave` 以及所有管理员接口），在执行业务逻辑前均应先执行到期检查并在同一事务内完成自动解封，确保状态读取的一致性。
+- **适用范围**：任何需要读取或依赖吧状态的操作，包括：
+  - `GET /api/bars`、`GET /api/bars/:id`
+  - `POST /api/bars/:id/join`、`POST /api/bars/:id/leave`
+  - `GET /api/users/me/bars`、`GET /api/users/me/created-bars`（这两个端点返回吧的 `status` 字段，需确保状态时效性）
+  - 所有针对特定吧（`:id`）的管理员接口（`approve`/`reject`/`suspend`/`unsuspend`/`ban`/`close`）
+  
+  上述操作在执行业务逻辑前均应先执行到期检查并在同一事务内完成自动解封，确保状态读取的一致性。
 - 每次访问吧详情（`GET /api/bars/:id`）时，若吧状态为 `suspended` 且 `suspend_until ≤ NOW()`，服务端在同一事务内将其状态更新为 `active`、同时清空 `suspend_until` 和 `status_reason` 后再返回结果（事务确保并发读取时不产生重复解封写入）。与手动 `unsuspend` 行为保持一致。
 - 吧列表（`GET /api/bars`）查询时同样执行此检查，确保 `active` 过滤的准确性。
 - 无需额外定时任务，第二阶段实现成本低。
 - 后续可在工程质量迭代中引入定时任务（`@nestjs/schedule`）批量处理到期封禁，两种策略可并存。
+- **实现要求（面向未来迁移）**：Lazy Eval 到期解封逻辑应封装为**独立的服务方法**（如 `BarsService.autoUnsuspendIfExpired(barId)`），由各业务端点在需要时显式调用，而非耦合在数据库查询层或全局中间件中。此设计确保：(1) 各业务端点对解封逻辑的依赖是显式、可审计的；(2) 未来迁移到异步定时任务方式时，只需移除各调用点的同步调用，无需重构业务逻辑；(3) 单元测试可独立验证解封行为。
 
 > **边界说明**：若封禁已通过 Lazy Evaluation 自动到期解封（吧状态已变为 `active`），此时管理员手动调用 `POST /api/admin/bars/:id/unsuspend` 会返回 `409 INVALID_STATE_TRANSITION`（当前状态非 `suspended`）。这是预期行为，前端应将此 `409` 提示为"该吧封禁已自动到期，无需手动解封，请刷新查看最新状态"，避免误导管理员认为操作失败。
 
@@ -260,13 +267,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 
 #### `POST /api/bars/:id/join` — 加入吧
 
-前置校验：吧状态必须为 `active` 或 `suspended`；用户未加入过该吧。
+前置校验：先执行封禁到期自动解封检查（见 §3.7）；吧状态必须为 `active` 或 `suspended`；用户未加入过该吧。
 成功响应（201）：返回新建的成员记录。
 失败响应：`404` 吧不存在（`pending_review`/`rejected` 状态的吧对非创建者同样返回 `404`）；`409` 已是成员或吧状态不允许加入（错误码 `BAR_NOT_JOINABLE`）。
 
 #### `POST /api/bars/:id/leave` — 退出吧
 
-前置校验：用户已加入该吧；吧主不可退出（需先转让吧主）；吧状态为 `active` 或 `suspended`（`permanently_banned`/`closed` 状态的吧不允许退出）。
+前置校验：先执行封禁到期自动解封检查（见 §3.7）；用户已加入该吧；吧主不可退出（需先转让吧主）；吧状态为 `active` 或 `suspended`（`permanently_banned`/`closed` 状态的吧不允许退出）。
 成功响应（200）：返回操作结果。
 失败响应：`404` 吧不存在（`pending_review`/`rejected` 状态的吧对非创建者同样返回 `404`）或用户未加入；`403` 吧主不可退出；`409` 吧状态不允许退出（错误码 `BAR_NOT_LEAVABLE`）。
 
@@ -294,6 +301,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 | `status` | string | 可选，按状态过滤（不传则返回所有状态）。待审核列表使用 `pending_review` |
 | `cursor` | string | 分页游标 |
 | `limit` | integer | 每页条数，默认 20，最大 100 |
+
+响应字段：每条吧包含 `id`、`name`、`status`、`statusReason`、`suspendUntil`、`memberCount`、`createdBy`（创建者用户信息摘要）、`createdAt`、`updatedAt`。按 `createdAt` 倒序排列。
 
 #### `POST /api/admin/bars/:id/approve` — 审核通过
 
@@ -348,10 +357,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 将吧状态变更为 `closed`，记录审计日志。
 失败响应：`400` 未提供原因；`404` 吧不存在；`409` 吧当前状态不允许此操作（非 `active` 或 `suspended`）。
 
+#### `GET /api/admin/actions` — 审计日志列表
+
+按操作时间倒序返回管理员操作审计日志，支持 cursor 分页。第二阶段不支持复杂过滤和搜索，仅提供基础分页浏览。
+
+查询参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `cursor` | string | 分页游标 |
+| `limit` | integer | 每页条数，默认 20，最大 100 |
+
+响应字段：每条日志包含 `id`、`action`（操作类型，如 `approve`/`reject`/`suspend`/`unsuspend`/`ban`/`close`）、`targetType`（目标类型，如 `bar`）、`targetId`、`targetName`（吧名）、`adminId`、`adminNickname`、`reason`（操作原因，如有）、`createdAt`。
+
 #### 管理员接口公共校验说明
 
-- 所有管理员接口在执行前先验证目标吧是否存在，不存在则返回 `404 Not Found`。
-- 所有管理员接口在执行业务逻辑前须先执行封禁到期自动解封检查（参见 §3.7），确保操作基于最新状态。
+- 所有针对特定吧（`:id`）的管理员接口在执行前先验证目标吧是否存在，不存在则返回 `404 Not Found`。
+- 所有针对特定吧（`:id`）的管理员接口在执行业务逻辑前须先执行封禁到期自动解封检查（参见 §3.7），确保操作基于最新状态。`GET /api/admin/bars` 列表端点无需执行此检查——列表仅展示当前 DB 状态，到期吧会在下次被单独访问或操作时自动解封。
 - 状态迁移不合法时（参见 §3.6）返回 `409 Conflict`，错误体：`{ "error": { "code": "INVALID_STATE_TRANSITION", "message": "..." } }`。
 - `suspend`、`ban`、`close` 操作中的 `reason` 字段写入 `bars.status_reason`，`unsuspend` 时清空该字段。
 - 所有操作记录到 `admin_actions` 审计表，`admin_id` 取当前登录用户 ID。
