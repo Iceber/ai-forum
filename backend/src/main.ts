@@ -21,17 +21,22 @@ async function bootstrap() {
   const allowAnyOrigin = allowedOrigins.includes('*');
   const allowMissingOrigin = process.env.NODE_ENV !== 'production';
 
+  if (allowAnyOrigin && process.env.NODE_ENV === 'production') {
+    console.warn(
+      'CORS_ORIGIN is set to "*"; this permits any origin and weakens CORS protection in production.',
+    );
+  }
+
   app.enableCors({
     origin: (origin, callback) => {
       if (!origin) {
-        return allowMissingOrigin
-          ? callback(null, true)
-          : callback(
-              new Error(
-                'CORS request rejected: Origin header is required in production',
-              ),
-              false,
-            );
+        if (allowMissingOrigin) return callback(null, true);
+        return callback(
+          new Error(
+            'CORS request rejected: Origin header is required in production',
+          ),
+          false,
+        );
       }
       if (allowAnyOrigin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
