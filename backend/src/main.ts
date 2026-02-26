@@ -18,14 +18,21 @@ async function bootstrap() {
         .filter(Boolean)
     : defaultOrigins;
 
+  const allowAnyOrigin = allowedOrigins.includes('*');
+  const allowNoOrigin = process.env.NODE_ENV !== 'production';
+
   app.enableCors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes('*')) return callback(null, true);
+      if (!origin) {
+        return allowNoOrigin
+          ? callback(null, true)
+          : callback(new Error('CORS origin missing'), false);
+      }
+      if (allowAnyOrigin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error(`CORS blocked for origin: ${origin}`), false);
     },
-    credentials: true,
+    credentials: !allowAnyOrigin,
   });
 
   app.useGlobalPipes(
