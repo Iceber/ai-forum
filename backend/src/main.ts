@@ -19,18 +19,28 @@ async function bootstrap() {
     : defaultOrigins;
 
   const allowAnyOrigin = allowedOrigins.includes('*');
-  const allowNoOrigin = process.env.NODE_ENV !== 'production';
+  const allowMissingOrigin = process.env.NODE_ENV !== 'production';
 
   app.enableCors({
     origin: (origin, callback) => {
       if (!origin) {
-        return allowNoOrigin
+        return allowMissingOrigin
           ? callback(null, true)
-          : callback(new Error('CORS origin missing'), false);
+          : callback(
+              new Error(
+                'CORS request rejected: Origin header is required in production',
+              ),
+              false,
+            );
       }
       if (allowAnyOrigin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error(`CORS blocked for origin: ${origin}`), false);
+      return callback(
+        new Error(
+          `CORS request blocked: Origin ${origin} is not in the allowed origins list`,
+        ),
+        false,
+      );
     },
     credentials: !allowAnyOrigin,
   });
