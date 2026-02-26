@@ -43,6 +43,7 @@ export async function fetchApi<T>(path: string): Promise<ApiResponse<T> | null> 
       if (process.env.NODE_ENV !== 'production') {
         console.warn(`Server API fetch failed: ${base}${path}`, error);
       }
+      continue;
     }
   }
   return null;

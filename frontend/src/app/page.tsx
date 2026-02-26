@@ -5,7 +5,7 @@ import { fetchApi } from '@/lib/server-api';
 async function fetchInitialPosts(): Promise<{ posts: Post[]; meta: PageMeta }> {
   try {
     const json = await fetchApi<Post[]>('/api/posts?limit=20');
-    if (!json) throw new Error('Failed to fetch posts from API');
+    if (!json) throw new Error('Failed to fetch posts from API (/api/posts)');
     if (json.error) throw new Error(json.error.message);
     return {
       posts: json.data ?? [],
@@ -19,7 +19,7 @@ async function fetchInitialPosts(): Promise<{ posts: Post[]; meta: PageMeta }> {
 async function fetchInitialBars(): Promise<Bar[]> {
   try {
     const json = await fetchApi<Bar[]>('/api/bars?limit=12');
-    if (!json) throw new Error('Failed to fetch bars from API');
+    if (!json) throw new Error('Failed to fetch bars from API (/api/bars)');
     if (json.error) throw new Error(json.error.message);
     return json.data ?? [];
   } catch {
