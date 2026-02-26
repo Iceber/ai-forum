@@ -42,6 +42,7 @@ async function bootstrap() {
         false,
       );
     },
+    // When allowing any origin, credentials must be disabled per CORS spec.
     credentials: !allowAnyOrigin,
   });
 
