@@ -28,7 +28,7 @@ export class PostsService {
       where,
       order: { createdAt: 'DESC' },
       take: take + 1,
-      relations: ['author'],
+      relations: ['author', 'bar'],
     });
 
     const hasMore = posts.length > take;
