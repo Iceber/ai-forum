@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Post, Bar, PageMeta, ApiResponse } from '@/types';
 import PostCard from '@/components/post/PostCard';
 import BarCard from '@/components/bar/BarCard';
-import apiClient from '@/lib/api-client';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -23,11 +22,15 @@ export default function HomeClient({
   const [meta, setMeta] = useState<PageMeta>(initialMeta);
   const [bars, setBars] = useState<Bar[]>(initialBars);
   const [loading, setLoading] = useState(false);
+  const didFetchFallback = useRef(false);
 
-  // Client-side fallback: fetch data if SSR returned empty
+  // Client-side fallback: fetch data if SSR returned empty (runs once)
   useEffect(() => {
+    if (didFetchFallback.current) return;
+    didFetchFallback.current = true;
+
     async function fetchFallback() {
-      if (posts.length === 0) {
+      if (initialPosts.length === 0) {
         try {
           const res = await fetch(`${API_BASE}/api/posts?limit=20`);
           if (res.ok) {
@@ -39,7 +42,7 @@ export default function HomeClient({
           }
         } catch { /* ignore */ }
       }
-      if (bars.length === 0) {
+      if (initialBars.length === 0) {
         try {
           const res = await fetch(`${API_BASE}/api/bars?limit=12`);
           if (res.ok) {
@@ -52,7 +55,7 @@ export default function HomeClient({
       }
     }
     fetchFallback();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initialPosts.length, initialBars.length]);
 
   const loadMore = async () => {
     if (!meta.hasMore || loading) return;
