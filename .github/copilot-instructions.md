@@ -307,7 +307,7 @@ backend/src/modules/{feature}/
 |-------------------|-------------------|-----------------------------------|
 | TypeScript 变量   | camelCase         | `postCount`、`currentUser`         |
 | TypeScript 类     | PascalCase        | `PostsService`、`CreatePostDto`    |
-| TypeScript 接口   | PascalCase（带 I 前缀可选） | `User`、`PaginatedResponse`        |
+| TypeScript 接口   | PascalCase（不加 I 前缀）  | `User`、`PaginatedResponse`        |
 | 数据库表名        | snake_case 复数    | `users`、`bar_members`、`posts`    |
 | 数据库列名        | snake_case         | `created_at`、`author_id`          |
 | API 路径          | kebab-case 复数    | `/bars`、`/bar-members`            |
