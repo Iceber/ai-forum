@@ -101,7 +101,7 @@ cat backend/migrations/001_initial_schema.sql | \
 | 变量名 | 示例值 | 说明 |
 |--------|--------|------|
 | `NEXT_PUBLIC_API_URL` | `http://localhost:3001` | 后端 API 地址（浏览器可访问） |
-| `API_INTERNAL_URL` | `http://backend:3001` | 仅服务端渲染使用的后端地址（Docker 内部网络） |
+| `API_INTERNAL_URL` | `http://backend:3001`（Docker） / `http://localhost:3001`（本地开发） | 仅服务端渲染使用的后端地址 |
 
 ---
 

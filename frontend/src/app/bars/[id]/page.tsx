@@ -4,15 +4,33 @@ import type { Bar, Post, ApiResponse, PageMeta } from '@/types';
 import PostCard from '@/components/post/PostCard';
 import BarPostsClient from './BarPostsClient';
 
-const API_URL =
-  process.env.API_INTERNAL_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
-  'http://localhost:3001';
+const API_BASES = Array.from(
+  new Set(
+    [
+      process.env.API_INTERNAL_URL,
+      process.env.NEXT_PUBLIC_API_URL,
+      'http://localhost:3001',
+    ].filter(Boolean),
+  ),
+);
+
+async function fetchApi<T>(path: string): Promise<ApiResponse<T> | null> {
+  for (const base of API_BASES) {
+    try {
+      const res = await fetch(`${base}${path}`, { cache: 'no-store' });
+      if (!res.ok) continue;
+      return (await res.json()) as ApiResponse<T>;
+    } catch {
+      // try next base URL
+    }
+  }
+  return null;
+}
 
 async function fetchBar(id: string): Promise<Bar | null> {
   try {
-    const res = await fetch(`${API_URL}/api/bars/${id}`, { cache: 'no-store' });
-    const json: ApiResponse<Bar> = await res.json();
+    const json = await fetchApi<Bar>(`/api/bars/${id}`);
+    if (!json) return null;
     return json.error ? null : (json.data ?? null);
   } catch {
     return null;
@@ -23,10 +41,8 @@ async function fetchBarPosts(
   barId: string,
 ): Promise<{ posts: Post[]; meta: PageMeta }> {
   try {
-    const res = await fetch(`${API_URL}/api/posts?barId=${barId}&limit=20`, {
-      cache: 'no-store',
-    });
-    const json: ApiResponse<Post[]> = await res.json();
+    const json = await fetchApi<Post[]>(`/api/posts?barId=${barId}&limit=20`);
+    if (!json) return { posts: [], meta: { hasMore: false } };
     return {
       posts: json.data ?? [],
       meta: json.meta ?? { hasMore: false },

@@ -4,15 +4,33 @@ import type { Post, Reply, ApiResponse } from '@/types';
 import ReplyItem from '@/components/reply/ReplyItem';
 import PostRepliesClient from './PostRepliesClient';
 
-const API_URL =
-  process.env.API_INTERNAL_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
-  'http://localhost:3001';
+const API_BASES = Array.from(
+  new Set(
+    [
+      process.env.API_INTERNAL_URL,
+      process.env.NEXT_PUBLIC_API_URL,
+      'http://localhost:3001',
+    ].filter(Boolean),
+  ),
+);
+
+async function fetchApi<T>(path: string): Promise<ApiResponse<T> | null> {
+  for (const base of API_BASES) {
+    try {
+      const res = await fetch(`${base}${path}`, { cache: 'no-store' });
+      if (!res.ok) continue;
+      return (await res.json()) as ApiResponse<T>;
+    } catch {
+      // try next base URL
+    }
+  }
+  return null;
+}
 
 async function fetchPost(id: string): Promise<Post | null> {
   try {
-    const res = await fetch(`${API_URL}/api/posts/${id}`, { cache: 'no-store' });
-    const json: ApiResponse<Post> = await res.json();
+    const json = await fetchApi<Post>(`/api/posts/${id}`);
+    if (!json) return null;
     return json.error ? null : (json.data ?? null);
   } catch {
     return null;
@@ -21,11 +39,8 @@ async function fetchPost(id: string): Promise<Post | null> {
 
 async function fetchReplies(postId: string): Promise<Reply[]> {
   try {
-    const res = await fetch(`${API_URL}/api/posts/${postId}/replies?limit=50`, {
-      cache: 'no-store',
-    });
-    const json: ApiResponse<Reply[]> = await res.json();
-    return json.data ?? [];
+    const json = await fetchApi<Reply[]>(`/api/posts/${postId}/replies?limit=50`);
+    return json?.data ?? [];
   } catch {
     return [];
   }
