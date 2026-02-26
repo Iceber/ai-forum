@@ -1,11 +1,13 @@
 import type { ApiResponse } from '@/types';
 
+const DEFAULT_API_URL = 'http://localhost:3001';
+
 const API_BASES = Array.from(
   new Set(
     [
       process.env.API_INTERNAL_URL,
       process.env.NEXT_PUBLIC_API_URL,
-      'http://localhost:3001',
+      DEFAULT_API_URL,
     ].filter(Boolean),
   ),
 );
@@ -27,7 +29,13 @@ export async function fetchApi<T>(path: string): Promise<ApiResponse<T> | null> 
         }
         continue;
       }
-      return (await res.json()) as ApiResponse<T>;
+      try {
+        return (await res.json()) as ApiResponse<T>;
+      } catch (error) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(`Server API JSON parse failed: ${base}${path}`, error);
+        }
+      }
     } catch (error) {
       if (process.env.NODE_ENV !== 'production') {
         console.warn(`Server API fetch failed: ${base}${path}`, error);
