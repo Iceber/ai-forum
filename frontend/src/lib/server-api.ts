@@ -10,6 +10,11 @@ const API_BASES = Array.from(
   ),
 );
 
+/**
+ * Server-side API fetch with base URL fallback.
+ * @param path API path starting with '/api/...'
+ * @returns Parsed ApiResponse or null if all bases fail or respond non-2xx.
+ */
 export async function fetchApi<T>(path: string): Promise<ApiResponse<T> | null> {
   for (const base of API_BASES) {
     try {
@@ -17,7 +22,9 @@ export async function fetchApi<T>(path: string): Promise<ApiResponse<T> | null> 
       if (!res.ok) continue;
       return (await res.json()) as ApiResponse<T>;
     } catch {
-      // try next base URL
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`Server API fetch failed: ${base}${path}`);
+      }
     }
   }
   return null;
