@@ -1,19 +1,26 @@
 'use client';
 
 import { useState } from 'react';
-import type { Post, PageMeta, ApiResponse } from '@/types';
+import type { Post, Bar, PageMeta, ApiResponse } from '@/types';
 import PostCard from '@/components/post/PostCard';
+import BarCard from '@/components/bar/BarCard';
 import apiClient from '@/lib/api-client';
 
 interface HomeClientProps {
   initialPosts: Post[];
   initialMeta: PageMeta;
+  initialBars: Bar[];
 }
 
-export default function HomeClient({ initialPosts, initialMeta }: HomeClientProps) {
+export default function HomeClient({
+  initialPosts,
+  initialMeta,
+  initialBars,
+}: HomeClientProps) {
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [meta, setMeta] = useState<PageMeta>(initialMeta);
   const [loading, setLoading] = useState(false);
+  const [bars] = useState<Bar[]>(initialBars);
 
   const loadMore = async () => {
     if (!meta.hasMore || loading) return;
@@ -41,6 +48,26 @@ export default function HomeClient({ initialPosts, initialMeta }: HomeClientProp
 
   return (
     <div>
+      <section className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">推荐吧</h2>
+        </div>
+        {bars.length === 0 ? (
+          <p className="text-gray-500 text-sm">暂无吧</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {bars.map((bar) => (
+              <BarCard
+                key={bar.id}
+                id={bar.id}
+                name={bar.name}
+                description={bar.description ?? ''}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
       <h1 className="text-2xl font-bold mb-6 text-gray-900">最新帖子</h1>
 
       {posts.length === 0 ? (

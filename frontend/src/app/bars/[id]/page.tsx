@@ -4,7 +4,10 @@ import type { Bar, Post, ApiResponse, PageMeta } from '@/types';
 import PostCard from '@/components/post/PostCard';
 import BarPostsClient from './BarPostsClient';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_URL =
+  process.env.API_INTERNAL_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  'http://localhost:3001';
 
 async function fetchBar(id: string): Promise<Bar | null> {
   try {

@@ -41,6 +41,7 @@ services:
       - backend
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:3001
+      API_INTERNAL_URL: http://backend:3001
 
 volumes:
   postgres_data:

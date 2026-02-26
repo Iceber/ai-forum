@@ -1,7 +1,10 @@
-import type { Post, ApiResponse, PageMeta } from '@/types';
+import type { Post, Bar, ApiResponse, PageMeta } from '@/types';
 import HomeClient from './HomeClient';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_URL =
+  process.env.API_INTERNAL_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  'http://localhost:3001';
 
 async function fetchInitialPosts(): Promise<{ posts: Post[]; meta: PageMeta }> {
   try {
@@ -19,7 +22,23 @@ async function fetchInitialPosts(): Promise<{ posts: Post[]; meta: PageMeta }> {
   }
 }
 
+async function fetchInitialBars(): Promise<Bar[]> {
+  try {
+    const res = await fetch(`${API_URL}/api/bars?limit=12`, {
+      cache: 'no-store',
+    });
+    const json: ApiResponse<Bar[]> = await res.json();
+    if (json.error) throw new Error(json.error.message);
+    return json.data ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export default async function HomePage() {
-  const { posts, meta } = await fetchInitialPosts();
-  return <HomeClient initialPosts={posts} initialMeta={meta} />;
+  const [{ posts, meta }, bars] = await Promise.all([
+    fetchInitialPosts(),
+    fetchInitialBars(),
+  ]);
+  return <HomeClient initialPosts={posts} initialMeta={meta} initialBars={bars} />;
 }
