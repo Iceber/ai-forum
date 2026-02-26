@@ -163,7 +163,7 @@ ALTER TABLE bars ALTER COLUMN status SET DEFAULT 'pending_review';
 |------|------|------|------|
 | `reviewed_by` | UUID | FK → users.id, NULL | 审核人 |
 | `reviewed_at` | TIMESTAMPTZ | NULL | 审核时间 |
-| `status_reason` | TEXT | NULL | 状态变更原因（适用于 `rejected`、`suspended`、`permanently_banned`、`closed` 状态，状态变更时根据情况更新） |
+| `status_reason` | TEXT | NULL | 状态变更原因（`reject`/`suspend`/`ban`/`close` 操作时写入，`approve`/`unsuspend` 时清空；适用于 `rejected`、`suspended`、`permanently_banned`、`closed` 状态） |
 | `suspend_until` | TIMESTAMPTZ | NULL | 临时封禁到期时间（仅 `suspended` 状态时有值，其他状态为 `null`） |
 | `member_count` | INTEGER | DEFAULT 0, NOT NULL | 成员数冗余计数，加入/退出时由服务层维护 |
 
