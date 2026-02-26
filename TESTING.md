@@ -2,14 +2,13 @@
 
 ## 概览
 
-本项目采用多层测试策略，覆盖后端单元测试、后端 E2E 测试、CI 集成冒烟测试（前后端），以及手动测试流程。
+本项目采用多层测试策略，覆盖后端单元测试、后端 E2E 测试、全栈冒烟测试（可本地 + CI 运行），以及手动测试流程。
 
 | 测试层级 | 工具 | 运行方式 | 覆盖范围 |
 |----------|------|----------|----------|
-| 后端单元测试 | Jest + NestJS Testing | `npm test` | Service 层逻辑 |
-| 后端 E2E 测试 | Jest + Supertest | `npm run test:e2e` | 完整 API 链路（含 DB） |
-| CI 后端冒烟 | curl + shell | CI workflow | 核心 API 快速验证 |
-| CI 前端冒烟 | curl + shell + docker compose | CI workflow | 页面可访问 + 内容 + API 集成 |
+| 后端单元测试 | Jest + NestJS Testing | `cd backend && npm test` | Service 层逻辑 |
+| 后端 E2E 测试 | Jest + Supertest | `cd backend && npm run test:e2e` | 完整 API 链路（含 DB） |
+| 全栈冒烟测试 | Shell + curl + docker compose | `./e2e/run-all.sh` | 前后端集成，核心 happy path |
 | 手动测试 | 浏览器 / curl | 开发者手工 | 全链路体验 |
 
 ---
@@ -119,44 +118,55 @@ cd backend && npm run test:e2e
 
 ---
 
-## 3. CI 集成冒烟测试
+## 3. 全栈冒烟测试（本地 + CI）
 
-CI 定义在 `.github/workflows/ci.yml`，包含以下 E2E 测试 Job:
+冒烟测试脚本位于 `e2e/` 目录，可在本地和 CI 中运行。详见 [e2e/README.md](e2e/README.md)。
 
-### 3.1 后端 E2E 冒烟 (`backend-e2e`)
+### 一键运行
 
-**环境**: Ubuntu + PostgreSQL service container + Node.js
+```bash
+# 构建镜像 + 启动服务 + 运行测试 + 自动清理
+./e2e/run-all.sh
 
-**流程**:
-1. Checkout → npm ci → 应用数据库迁移
-2. Seed 测试用户和吧数据
-3. 构建并启动后端服务
-4. 执行 curl 冒烟检查:
-   - 注册新用户 → 获取 JWT Token
-   - 创建帖子 → 验证 201 响应
-   - 创建回复 → 验证 201 响应
+# 跳过镜像重建（更快）
+./e2e/run-all.sh --no-build
 
-### 3.2 前端 E2E 冒烟 (`frontend-e2e`)
+# 测试后保留容器（便于调试）
+./e2e/run-all.sh --keep
+```
 
-**环境**: docker compose（postgres + backend + frontend 全容器化）
+### 分步运行
 
-**流程**:
-1. `docker compose up -d --build`
-2. 等待 PostgreSQL 就绪
-3. 应用迁移 + Seed 用户和吧数据
-4. 等待 backend (3001) 和 frontend (3000) 就绪
-5. **页面可访问性检查**: 验证 `/`、`/login`、`/register` 返回 200
-6. **页面内容验证**:
-   - 首页包含 Next.js 渲染内容（SSR 数据或 `__NEXT_DATA__`）
-   - 登录页包含表单输入（`type="email"`、`type="password"`）
-   - 注册页包含表单输入（`type="email"`、`type="password"`）
-7. **API 集成检查**:
-   - 通过 API 注册用户 → 获取 Token
-   - 通过 API 创建帖子 → 获取 postId
-   - 通过 API 创建回复
-   - 验证 bar 详情页返回 200（`/bars/:id`）
-   - 验证 post 详情页返回 200（`/posts/:id`）
-8. `docker compose down -v`
+```bash
+./e2e/setup-e2e.sh            # 启动 docker compose + 迁移 + 种子数据
+./e2e/backend-e2e-smoke.sh    # 后端 API 冒烟测试
+./e2e/frontend-e2e-smoke.sh   # 前端页面 + API 集成冒烟测试
+./e2e/teardown-e2e.sh         # 清理容器
+```
+
+### 前置条件
+
+- Docker + Docker Compose 已安装
+- curl + jq 已安装
+- 端口 3000 / 3001 / 5432 未被占用
+
+### 脚本说明
+
+| 脚本 | 说明 |
+|------|------|
+| `e2e/seed.sql` | E2E 种子数据（用户 + 吧），CI 和本地共用 |
+| `e2e/setup-e2e.sh` | docker compose up + 迁移 + 种子 + 等待服务就绪 |
+| `e2e/teardown-e2e.sh` | docker compose down -v |
+| `e2e/backend-e2e-smoke.sh` | 注册 → 创建帖子 → 创建回复 |
+| `e2e/frontend-e2e-smoke.sh` | 页面可访问 + 内容验证 + API 集成 |
+| `e2e/run-all.sh` | 一键运行：setup → backend → frontend → teardown |
+
+### CI 中的调用
+
+CI 定义在 `.github/workflows/ci.yml`，E2E Job 直接调用 `e2e/` 下的脚本：
+
+- **`backend-e2e`**: 应用迁移 → `e2e/seed.sql` → 启动后端 → `./e2e/backend-e2e-smoke.sh`
+- **`frontend-e2e`**: docker compose up → 迁移 + `e2e/seed.sql` → `./e2e/frontend-e2e-smoke.sh`
 
 ---
 

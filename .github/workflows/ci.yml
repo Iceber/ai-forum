@@ -91,20 +91,7 @@ jobs:
 
       - name: Seed database for E2E tests
         run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -d ai_forum <<'SQL'
-          INSERT INTO users (id, email, password_hash, nickname)
-          VALUES ('00000000-0000-4000-a000-000000000010', 'e2e-seed@example.com', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8x6/0D9QmX8JY9Vn0kGugHgd6Nq35a', 'seed-user')
-          ON CONFLICT (email) DO NOTHING;
-
-          INSERT INTO bars (id, name, description, created_by)
-          VALUES (
-            '00000000-0000-4000-a000-000000000001',
-            'e2e-test-bar',
-            'Bar for backend e2e tests',
-            '00000000-0000-4000-a000-000000000010'
-          )
-          ON CONFLICT (name) DO NOTHING;
-          SQL
+          PGPASSWORD=postgres psql -h localhost -U postgres -d ai_forum -f e2e/seed.sql
 
       - name: Build backend
         working-directory: backend
@@ -130,44 +117,11 @@ jobs:
           exit 1
 
       - name: Backend E2E smoke checks
-        working-directory: backend
         env:
           API_URL: http://localhost:3001/api
           TEST_BAR_ID: 00000000-0000-4000-a000-000000000001
           JWT_SECRET: test-jwt-secret-32-characters-minimum
-        run: |
-          EMAIL="backend-e2e-$(date +%s)@example.com"
-          REGISTER_RESPONSE=$(curl -sS -X POST "$API_URL/auth/register" \
-            -H "Content-Type: application/json" \
-            -d "{\"email\":\"$EMAIL\",\"password\":\"Password123!\",\"nickname\":\"BackendE2E\"}" \
-            -w $'\n%{http_code}')
-          REGISTER_STATUS=$(echo "$REGISTER_RESPONSE" | tail -n1)
-          REGISTER_BODY=$(echo "$REGISTER_RESPONSE" | sed '$d')
-          if [ "$REGISTER_STATUS" = "201" ]; then
-            TOKEN=$(echo "$REGISTER_BODY" | jq -r '.data.accessToken')
-          else
-            echo "Register failed with status $REGISTER_STATUS"
-            echo "$REGISTER_BODY"
-            echo "Falling back to seeded e2e user auth (id: 00000000-0000-4000-a000-000000000010, email: e2e-seed@example.com)"
-            TOKEN=$(python -c "import base64,hashlib,hmac,json,os;b64=lambda b:base64.urlsafe_b64encode(b).rstrip(b'=').decode();h=b64(json.dumps({'alg':'HS256','typ':'JWT'},separators=(',',':')).encode());p=b64(json.dumps({'sub':'00000000-0000-4000-a000-000000000010','email':'e2e-seed@example.com','tokenVersion':0},separators=(',',':')).encode());s=b64(hmac.new(os.environ['JWT_SECRET'].encode(),f'{h}.{p}'.encode(),hashlib.sha256).digest());print(f'{h}.{p}.{s}')")
-          fi
-          POST_RESPONSE=$(curl -sS -X POST "$API_URL/posts" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $TOKEN" \
-            -d "{\"barId\":\"$TEST_BAR_ID\",\"title\":\"Backend E2E Post\",\"content\":\"Backend E2E Content\",\"contentType\":\"plaintext\"}" \
-            -w $'\n%{http_code}')
-          POST_STATUS=$(echo "$POST_RESPONSE" | tail -n1)
-          POST_BODY=$(echo "$POST_RESPONSE" | sed '$d')
-          [ "$POST_STATUS" = "201" ] || { echo "Create post failed with status $POST_STATUS"; echo "$POST_BODY"; exit 1; }
-          POST_ID=$(echo "$POST_BODY" | jq -r '.data.id')
-          REPLY_RESPONSE=$(curl -sS -X POST "$API_URL/posts/$POST_ID/replies" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $TOKEN" \
-            -d '{"content":"Backend E2E Reply","contentType":"plaintext"}' \
-            -w $'\n%{http_code}')
-          REPLY_STATUS=$(echo "$REPLY_RESPONSE" | tail -n1)
-          REPLY_BODY=$(echo "$REPLY_RESPONSE" | sed '$d')
-          [ "$REPLY_STATUS" = "201" ] || { echo "Create reply failed with status $REPLY_STATUS"; echo "$REPLY_BODY"; exit 1; }
+        run: ./e2e/backend-e2e-smoke.sh
 
   frontend-e2e:
     runs-on: ubuntu-latest
@@ -192,20 +146,7 @@ jobs:
       - name: Apply migration and seed data
         run: |
           cat backend/migrations/001_initial_schema.sql | docker compose exec -T postgres psql -U aiforum -d aiforum
-          docker compose exec -T postgres psql -U aiforum -d aiforum <<'SQL'
-          INSERT INTO users (id, email, password_hash, nickname)
-          VALUES ('00000000-0000-4000-a000-000000000020', 'frontend-seed@example.com', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8x6/0D9QmX8JY9Vn0kGugHgd6Nq35a', 'frontend-seed-user')
-          ON CONFLICT (email) DO NOTHING;
-
-          INSERT INTO bars (id, name, description, created_by)
-          VALUES (
-            '00000000-0000-4000-a000-000000000011',
-            'frontend-e2e-bar',
-            'Bar for frontend e2e tests',
-            '00000000-0000-4000-a000-000000000020'
-          )
-          ON CONFLICT (name) DO NOTHING;
-          SQL
+          cat e2e/seed.sql | docker compose exec -T postgres psql -U aiforum -d aiforum
 
       - name: Wait for services
         run: |
@@ -219,81 +160,12 @@ jobs:
           docker compose logs
           exit 1
 
-      - name: Frontend E2E – page accessibility
-        run: |
-          echo "--- Checking pages return 200 ---"
-          curl -fsS http://localhost:3000          >/dev/null
-          curl -fsS http://localhost:3000/login     >/dev/null
-          curl -fsS http://localhost:3000/register  >/dev/null
-          echo "All pages accessible."
-
-      - name: Frontend E2E – page content verification
-        run: |
-          echo "--- Home page should render successfully ---"
-          HOME=$(curl -sS http://localhost:3000)
-          # Check for Next.js rendered content (SSR HTML contains __next root or known static text)
-          echo "$HOME" | grep -qi '__next\|__NEXT_DATA__\|frontend-e2e-bar' || { echo "Home page missing expected Next.js content"; echo "$HOME" | head -20; exit 1; }
-
-          echo "--- Login page should contain form inputs ---"
-          LOGIN=$(curl -sS http://localhost:3000/login)
-          echo "$LOGIN" | grep -qi 'type="email"\|type="password"\|name="email"\|name="password"' || { echo "Login page missing form inputs"; exit 1; }
-
-          echo "--- Register page should contain form inputs ---"
-          REGISTER=$(curl -sS http://localhost:3000/register)
-          echo "$REGISTER" | grep -qi 'type="email"\|type="password"' || { echo "Register page missing form inputs"; exit 1; }
-
-          echo "All page content verified."
-
-      - name: Frontend E2E – backend API integration
+      - name: Frontend E2E smoke checks
         env:
+          FRONTEND_URL: http://localhost:3000
           API_URL: http://localhost:3001/api
           TEST_BAR_ID: 00000000-0000-4000-a000-000000000011
-        run: |
-          echo "--- Verify backend API is reachable from host ---"
-          BARS=$(curl -sS "$API_URL/bars")
-          echo "$BARS" | jq -e '.data | length >= 1' || { echo "No bars returned from API"; echo "$BARS"; exit 1; }
-
-          echo "--- Register a test user via API ---"
-          EMAIL="fe-e2e-$(date +%s)@example.com"
-          REG_RESP=$(curl -sS -X POST "$API_URL/auth/register" \
-            -H "Content-Type: application/json" \
-            -d "{\"email\":\"$EMAIL\",\"password\":\"Password123!\",\"nickname\":\"FE-E2E\"}" \
-            -w $'\n%{http_code}')
-          REG_STATUS=$(echo "$REG_RESP" | tail -n1)
-          REG_BODY=$(echo "$REG_RESP" | sed '$d')
-          [ "$REG_STATUS" = "201" ] || { echo "Register failed ($REG_STATUS)"; echo "$REG_BODY"; exit 1; }
-          TOKEN=$(echo "$REG_BODY" | jq -r '.data.accessToken')
-
-          echo "--- Create a post via API ---"
-          POST_RESP=$(curl -sS -X POST "$API_URL/posts" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $TOKEN" \
-            -d "{\"barId\":\"$TEST_BAR_ID\",\"title\":\"Frontend E2E Post\",\"content\":\"Created during CI\",\"contentType\":\"plaintext\"}" \
-            -w $'\n%{http_code}')
-          POST_STATUS=$(echo "$POST_RESP" | tail -n1)
-          POST_BODY=$(echo "$POST_RESP" | sed '$d')
-          [ "$POST_STATUS" = "201" ] || { echo "Create post failed ($POST_STATUS)"; echo "$POST_BODY"; exit 1; }
-          POST_ID=$(echo "$POST_BODY" | jq -r '.data.id')
-
-          echo "--- Create a reply via API ---"
-          REPLY_RESP=$(curl -sS -X POST "$API_URL/posts/$POST_ID/replies" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $TOKEN" \
-            -d '{"content":"CI reply","contentType":"plaintext"}' \
-            -w $'\n%{http_code}')
-          REPLY_STATUS=$(echo "$REPLY_RESP" | tail -n1)
-          REPLY_BODY=$(echo "$REPLY_RESP" | sed '$d')
-          [ "$REPLY_STATUS" = "201" ] || { echo "Create reply failed ($REPLY_STATUS)"; echo "$REPLY_BODY"; exit 1; }
-
-          echo "--- Verify bar detail page renders ---"
-          BAR_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:3000/bars/$TEST_BAR_ID)
-          [ "$BAR_STATUS" = "200" ] || { echo "Bar detail page returned $BAR_STATUS"; exit 1; }
-
-          echo "--- Verify post detail page renders ---"
-          POST_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:3000/posts/$POST_ID)
-          [ "$POST_STATUS" = "200" ] || { echo "Post detail page returned $POST_STATUS"; exit 1; }
-
-          echo "All API integration checks passed."
+        run: ./e2e/frontend-e2e-smoke.sh
 
       - name: Stop containers
         if: always()
