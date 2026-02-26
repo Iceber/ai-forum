@@ -30,7 +30,7 @@ services:
       JWT_SECRET: change_me_in_production_32chars_min
       JWT_EXPIRES_IN: 7d
       PORT: 3001
-      CORS_ORIGIN: http://localhost:3000
+      CORS_ORIGIN: http://localhost:3000,http://127.0.0.1:3000
 
   frontend:
     build:

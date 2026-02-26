@@ -93,7 +93,7 @@ cat backend/migrations/001_initial_schema.sql | \
 | `JWT_SECRET` | `change_me_in_production_32chars_min` | JWT 签名密钥，生产环境务必更换 |
 | `JWT_EXPIRES_IN` | `7d` | JWT 有效期 |
 | `PORT` | `3001` | 后端监听端口 |
-| `CORS_ORIGIN` | `http://localhost:3000` | 允许跨域的前端地址 |
+| `CORS_ORIGIN` | `http://localhost:3000,http://127.0.0.1:3000` | 允许跨域的前端地址（逗号分隔多个） |
 
 ### 前端（`frontend/.env.local`）
 
