@@ -9,6 +9,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   backend-unit-test:
     runs-on: ubuntu-latest
@@ -88,11 +91,11 @@ jobs:
         run: |
           PGPASSWORD=postgres psql -h localhost -U postgres -d ai_forum -f backend/migrations/001_initial_schema.sql
 
-      - name: Seed bar for E2E tests
+      - name: Seed database for E2E tests
         run: |
           PGPASSWORD=postgres psql -h localhost -U postgres -d ai_forum <<'SQL'
           INSERT INTO users (id, email, password_hash, nickname)
-          VALUES ('00000000-0000-0000-0000-000000000010', 'e2e-seed@example.com', 'seed', 'seed-user')
+          VALUES ('00000000-0000-0000-0000-000000000010', 'e2e-seed@example.com', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8x6/0D9QmX8JY9Vn0kGugHgd6Nq35a', 'seed-user')
           ON CONFLICT (email) DO NOTHING;
 
           INSERT INTO bars (id, name, description, created_by)
@@ -137,12 +140,12 @@ jobs:
           REGISTER_RESPONSE=$(curl -fsS -X POST "$API_URL/auth/register" \
             -H "Content-Type: application/json" \
             -d "{\"email\":\"$EMAIL\",\"password\":\"Password123!\",\"nickname\":\"BackendE2E\"}")
-          TOKEN=$(echo "$REGISTER_RESPONSE" | node -e 'let d=\"\";process.stdin.on(\"data\",c=>d+=c);process.stdin.on(\"end\",()=>process.stdout.write(JSON.parse(d).data.accessToken));')
+          TOKEN=$(echo "$REGISTER_RESPONSE" | jq -r '.data.accessToken')
           POST_RESPONSE=$(curl -fsS -X POST "$API_URL/posts" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $TOKEN" \
             -d "{\"barId\":\"$TEST_BAR_ID\",\"title\":\"Backend E2E Post\",\"content\":\"Backend E2E Content\"}")
-          POST_ID=$(echo "$POST_RESPONSE" | node -e 'let d=\"\";process.stdin.on(\"data\",c=>d+=c);process.stdin.on(\"end\",()=>process.stdout.write(JSON.parse(d).data.id));')
+          POST_ID=$(echo "$POST_RESPONSE" | jq -r '.data.id')
           curl -fsS -X POST "$API_URL/posts/$POST_ID/replies" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $TOKEN" \
@@ -173,7 +176,7 @@ jobs:
           cat backend/migrations/001_initial_schema.sql | docker compose exec -T postgres psql -U aiforum -d aiforum
           docker compose exec -T postgres psql -U aiforum -d aiforum <<'SQL'
           INSERT INTO users (id, email, password_hash, nickname)
-          VALUES ('00000000-0000-0000-0000-000000000020', 'frontend-seed@example.com', 'seed', 'frontend-seed-user')
+          VALUES ('00000000-0000-0000-0000-000000000020', 'frontend-seed@example.com', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8x6/0D9QmX8JY9Vn0kGugHgd6Nq35a', 'frontend-seed-user')
           ON CONFLICT (email) DO NOTHING;
 
           INSERT INTO bars (id, name, description, created_by)
