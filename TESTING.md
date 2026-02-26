@@ -147,15 +147,15 @@ CI 定义在 `.github/workflows/ci.yml`，包含以下 E2E 测试 Job:
 4. 等待 backend (3001) 和 frontend (3000) 就绪
 5. **页面可访问性检查**: 验证 `/`、`/login`、`/register` 返回 200
 6. **页面内容验证**:
-   - 首页包含关键元素（bar、post 等）
-   - 登录页包含表单（email、password）
-   - 注册页包含表单（email、password、nickname）
+   - 首页包含 Next.js 渲染内容（SSR 数据或 `__NEXT_DATA__`）
+   - 登录页包含表单输入（`type="email"`、`type="password"`）
+   - 注册页包含表单输入（`type="email"`、`type="password"`）
 7. **API 集成检查**:
    - 通过 API 注册用户 → 获取 Token
    - 通过 API 创建帖子 → 获取 postId
    - 通过 API 创建回复
-   - 验证 bar 详情页能渲染
-   - 验证 post 详情页能渲染
+   - 验证 bar 详情页返回 200（`/bars/:id`）
+   - 验证 post 详情页返回 200（`/posts/:id`）
 8. `docker compose down -v`
 
 ---

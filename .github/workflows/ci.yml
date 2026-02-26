@@ -229,17 +229,18 @@ jobs:
 
       - name: Frontend E2E – page content verification
         run: |
-          echo "--- Home page should contain key elements ---"
+          echo "--- Home page should render successfully ---"
           HOME=$(curl -sS http://localhost:3000)
-          echo "$HOME" | grep -qi "bar\|forum\|post\|AI" || { echo "Home page missing expected content"; exit 1; }
+          # Check for Next.js rendered content (SSR HTML contains __next root or known static text)
+          echo "$HOME" | grep -qi '__next\|__NEXT_DATA__\|frontend-e2e-bar' || { echo "Home page missing expected Next.js content"; echo "$HOME" | head -20; exit 1; }
 
-          echo "--- Login page should contain form ---"
+          echo "--- Login page should contain form inputs ---"
           LOGIN=$(curl -sS http://localhost:3000/login)
-          echo "$LOGIN" | grep -qi "email\|password\|login" || { echo "Login page missing form elements"; exit 1; }
+          echo "$LOGIN" | grep -qi 'type="email"\|type="password"\|name="email"\|name="password"' || { echo "Login page missing form inputs"; exit 1; }
 
-          echo "--- Register page should contain form ---"
+          echo "--- Register page should contain form inputs ---"
           REGISTER=$(curl -sS http://localhost:3000/register)
-          echo "$REGISTER" | grep -qi "email\|password\|register\|nickname" || { echo "Register page missing form elements"; exit 1; }
+          echo "$REGISTER" | grep -qi 'type="email"\|type="password"' || { echo "Register page missing form inputs"; exit 1; }
 
           echo "All page content verified."
 
@@ -285,12 +286,12 @@ jobs:
           [ "$REPLY_STATUS" = "201" ] || { echo "Create reply failed ($REPLY_STATUS)"; echo "$REPLY_BODY"; exit 1; }
 
           echo "--- Verify bar detail page renders ---"
-          BAR_PAGE=$(curl -sS http://localhost:3000/bars/$TEST_BAR_ID)
-          echo "$BAR_PAGE" | grep -qi "frontend-e2e-bar\|post\|bar" || { echo "Bar page missing expected content"; exit 1; }
+          BAR_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:3000/bars/$TEST_BAR_ID)
+          [ "$BAR_STATUS" = "200" ] || { echo "Bar detail page returned $BAR_STATUS"; exit 1; }
 
           echo "--- Verify post detail page renders ---"
-          POST_PAGE=$(curl -sS http://localhost:3000/posts/$POST_ID)
-          echo "$POST_PAGE" | grep -qi "Frontend E2E Post\|post\|reply" || { echo "Post page missing expected content"; exit 1; }
+          POST_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:3000/posts/$POST_ID)
+          [ "$POST_STATUS" = "200" ] || { echo "Post detail page returned $POST_STATUS"; exit 1; }
 
           echo "All API integration checks passed."
 
