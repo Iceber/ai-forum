@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import { Post } from './post.entity';
@@ -64,7 +68,18 @@ export class PostsService {
       content: dto.content,
       contentType: dto.contentType ?? 'plaintext',
     });
-    return this.postsRepository.save(post);
+    const saved = await this.postsRepository.save(post);
+
+    const createdPost = await this.postsRepository.findOne({
+      where: { id: saved.id },
+      relations: ['author', 'bar'],
+    });
+
+    if (!createdPost) {
+      throw new InternalServerErrorException('Failed to load created post');
+    }
+
+    return createdPost;
   }
 
   async incrementReplyCount(postId: string, replyAt: Date): Promise<void> {
