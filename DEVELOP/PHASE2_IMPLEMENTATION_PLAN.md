@@ -102,7 +102,7 @@
 | `suspendUntil` | ISO8601 \| null | 临时封禁时返回到期时间，其他状态为 `null` |
 | `statusReason` | string \| null | 状态变更原因（`rejected`/`suspended`/`permanently_banned`/`closed` 时有值），其他状态为 `null` |
 
-> 非 `active` 状态的吧详情页仍可通过 `GET /api/bars/:id` 访问（已加入成员需能查看历史内容），但吧列表（`GET /api/bars`）不展示这些吧。
+> `suspended`/`permanently_banned`/`closed` 状态的吧详情页仍可通过 `GET /api/bars/:id` 访问（已加入成员需能查看历史内容），`pending_review`/`rejected` 状态仅创建者可访问（见 §5.1）。吧列表（`GET /api/bars`）仅展示 `active` 状态的吧。
 
 ### 3.6 吧状态流转规则
 
@@ -408,14 +408,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 按加入时间倒序返回当前用户已加入的吧，支持 cursor 分页。执行查询前，对 `suspended` 且已到期的吧自动解封（见 §3.7），确保返回的 `status` 字段反映最新状态。
 
 查询参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
-响应字段：每条吧包含 `id`、`name`、`description`、`status`、`memberCount`、`joinedAt` 等基本信息。含所有状态的吧（包括 `suspended`、`permanently_banned`、`closed`），附带状态标识。
+响应字段：每条吧包含 `id`、`name`、`description`、`status`、`statusReason`（状态变更原因）、`suspendUntil`（临时封禁到期时间）、`memberCount`、`joinedAt` 等基本信息。含所有状态的吧（包括 `suspended`、`permanently_banned`、`closed`），附带状态标识。
 
 #### `GET /api/users/me/created-bars` — 我创建的吧列表
 
 按创建时间倒序返回当前用户创建的吧，支持 cursor 分页。执行查询前，对 `suspended` 且已到期的吧自动解封（见 §3.7），确保返回的 `status` 字段反映最新状态。包含所有状态的吧（`pending_review`、`active`、`rejected`、`suspended`、`permanently_banned`、`closed`）。
 
 查询参数：`cursor`（可选）、`limit`（默认 20，最大 100）。
-响应字段：每条吧包含 `id`、`name`、`status`、`statusReason`（状态变更原因，如被拒绝/封禁/关闭原因）、`createdAt` 等基本信息。
+响应字段：每条吧包含 `id`、`name`、`status`、`statusReason`（状态变更原因，如被拒绝/封禁/关闭原因）、`suspendUntil`（临时封禁到期时间）、`createdAt` 等基本信息。
 
 #### `PATCH /api/users/me/profile` — 编辑个人资料
 
