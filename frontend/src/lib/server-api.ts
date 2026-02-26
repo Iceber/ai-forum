@@ -1,13 +1,14 @@
 import type { ApiResponse } from '@/types';
 
-const DEFAULT_API_URL = process.env.API_DEFAULT_URL ?? 'http://localhost:3001';
+const FALLBACK_API_URL = process.env.API_DEFAULT_URL ?? 'http://localhost:3001';
 
+// Environment variables are read at module load; base list is static for the runtime.
 const API_BASES = Array.from(
   new Set(
     [
       process.env.API_INTERNAL_URL,
       process.env.NEXT_PUBLIC_API_URL,
-      DEFAULT_API_URL,
+      FALLBACK_API_URL,
     ].filter(Boolean),
   ),
 );
