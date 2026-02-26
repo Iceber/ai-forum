@@ -184,7 +184,7 @@ backend/
 | **common/http-exception.filter** | 将所有异常转换为统一错误信封格式 | `http-exception.filter.ts` |
 | **auth** | 注册、登录、JWT 签发与验证 | `auth.controller.ts`, `auth.service.ts`, `jwt.strategy.ts` |
 | **users** | 用户实体定义与基础查询 | `user.entity.ts`, `users.service.ts` |
-| **bars** | 吧的列表查询、详情查询、创建（含 owner 成员写入） | `bars.controller.ts`, `bars.service.ts` |
+| **bars** | 吧的列表查询、详情查询、内部创建（seed 使用，含 owner 成员写入） | `bars.controller.ts`, `bars.service.ts` |
 | **posts** | 帖子的列表、详情、创建，回复计数更新 | `posts.controller.ts`, `posts.service.ts` |
 | **replies** | 回复的列表、创建，楼层号自动递增 | `replies.controller.ts`, `replies.service.ts` |
 
@@ -673,8 +673,8 @@ frontend/
 | 登录 | `/login` | CSR | `POST /api/auth/login` |
 | 注册 | `/register` | CSR | `POST /api/auth/register` |
 | 发帖 | `/create-post` | CSR（需登录） | `GET /api/bars`, `POST /api/posts` |
-| 吧详情 | `/bars/[id]` | SSR + CSR | `GET /api/bars/:id`, `GET /api/posts?barId=...&limit=20` |
-| 帖子详情 | `/posts/[id]` | SSR + CSR | `GET /api/posts/:id`, `GET /api/posts/:id/replies?limit=50` |
+| 吧详情 | `/bars/[id]` | CSR | `GET /api/bars/:id`, `GET /api/posts?barId=...&limit=20` |
+| 帖子详情 | `/posts/[id]` | CSR | `GET /api/posts/:id`, `GET /api/posts/:id/replies?limit=50` |
 
 ---
 
