@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { Post, Bar, PageMeta, ApiResponse } from '@/types';
+import Link from 'next/link';
 import PostCard from '@/components/post/PostCard';
-import BarCard from '@/components/bar/BarCard';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -79,20 +79,19 @@ export default function HomeClient({
   return (
     <div>
       <section className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">推荐吧</h2>
-        </div>
-        {initialBars.length === 0 ? (
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">推荐吧</h2>
+        {bars.length === 0 ? (
           <p className="text-gray-500 text-sm">暂无吧</p>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {initialBars.map((bar) => (
-              <BarCard
+          <div className="flex flex-wrap gap-2">
+            {bars.map((bar) => (
+              <Link
                 key={bar.id}
-                id={bar.id}
-                name={bar.name}
-                description={bar.description ?? ''}
-              />
+                href={`/bars/${bar.id}`}
+                className="px-3 py-1.5 bg-white border border-gray-200 rounded-full text-sm text-gray-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 transition-colors"
+              >
+                {bar.name}
+              </Link>
             ))}
           </div>
         )}
