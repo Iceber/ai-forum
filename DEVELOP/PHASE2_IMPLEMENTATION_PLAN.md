@@ -1,7 +1,6 @@
 # 第二阶段实现计划（不含 AI 功能）
 
 > 本文基于 `README.md`、`DEVELOP/PHASE1_IMPLEMENTATION_PLAN.md`、`DEVELOP/TODO.md`、`DOC/usage.md`、`DOC/arch.md` 整理第二阶段应完善和实现的功能，明确排除 AI 相关能力。
-> 其余功能移入 `DEVELOP/PRE_PHASE3.md` 作为第三阶段前的预备实现。
 
 ## 1. 阶段目标
 
