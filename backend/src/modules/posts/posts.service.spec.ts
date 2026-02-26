@@ -58,6 +58,11 @@ describe('PostsService', () => {
       expect(result.data).toHaveLength(1);
       expect(result.meta.hasMore).toBe(false);
       expect(result.meta.cursor).toBeNull();
+      expect(repo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          relations: ['author', 'bar'],
+        }),
+      );
     });
 
     it('should return hasMore=true and next cursor when more items exist', async () => {
