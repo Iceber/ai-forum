@@ -41,9 +41,11 @@ for i in $(seq 1 30); do
   fi
 done
 
-# ─── 3. Apply migration ─────────────────────────────────────────────
-echo "--- Applying database migration ---"
+# ─── 3. Apply migrations ────────────────────────────────────────────
+echo "--- Applying database migrations ---"
 cat "$PROJECT_ROOT/backend/migrations/001_initial_schema.sql" \
+  | docker compose exec -T postgres psql -U aiforum -d aiforum
+cat "$PROJECT_ROOT/backend/migrations/002_phase2_bars_admin.sql" \
   | docker compose exec -T postgres psql -U aiforum -d aiforum
 
 # ─── 4. Seed E2E data ───────────────────────────────────────────────

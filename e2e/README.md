@@ -7,7 +7,7 @@
 ```
 e2e/
 ├── README.md               # 本文档
-├── seed.sql                # E2E 测试种子数据（用户 + 吧）
+├── seed.sql                # E2E 测试种子数据（普通用户 + 管理员 + 吧）
 ├── setup-e2e.sh            # 启动环境：docker compose + 迁移 + 种子数据
 ├── teardown-e2e.sh         # 清理环境：docker compose down -v
 ├── backend-e2e-smoke.sh    # 后端 API 冒烟测试
@@ -70,6 +70,7 @@ e2e/
 | 类型 | ID | 说明 |
 |------|------|------|
 | 用户 | `00000000-0000-4000-a000-000000000010` | 后端 E2E 种子用户 |
+| 用户 | `00000000-0000-4000-a000-000000000030` | 后端 E2E 管理员用户 |
 | 吧   | `00000000-0000-4000-a000-000000000001` | 后端 E2E 种子吧 |
 | 用户 | `00000000-0000-4000-a000-000000000020` | 前端 E2E 种子用户 |
 | 吧   | `00000000-0000-4000-a000-000000000011` | 前端 E2E 种子吧 |
@@ -80,9 +81,11 @@ e2e/
 
 ### 后端冒烟测试 (`backend-e2e-smoke.sh`)
 
-1. **注册用户** — `POST /api/auth/register` → 201
-2. **创建帖子** — `POST /api/posts` → 201
-3. **创建回复** — `POST /api/posts/:id/replies` → 201
+1. **注册/鉴权** — `POST /api/auth/register`、`GET /api/auth/me`
+2. **吧创建与成员关系** — `POST /api/bars`、`POST /api/bars/:id/join`、`POST /api/bars/:id/leave`
+3. **管理员流转** — `POST /api/admin/bars/:id/approve|suspend|unsuspend`
+4. **内容创建** — `POST /api/posts`、`POST /api/posts/:id/replies`
+5. **个人中心** — `GET /api/users/me/*`、`PATCH /api/users/me/profile`
 
 ### 前端冒烟测试 (`frontend-e2e-smoke.sh`)
 
@@ -96,9 +99,10 @@ e2e/
 - 登录页包含表单输入（`type="email"`、`type="password"`）
 - 注册页包含表单输入
 
-**Phase 3 — API 集成**
-- 通过 API 注册用户 → 创建帖子 → 创建回复
-- 验证吧详情页和帖子详情页返回 200
+**Phase 3 — API 集成（含 Phase 2）**
+- 通过 API 注册用户 → 创建吧申请 → 加入/退出吧
+- 管理员审核吧与查看审计日志
+- 验证个人中心相关 API（我的吧、我创建的吧）可返回数据
 
 ## 与 Jest E2E 测试的关系
 

@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import type { Post, Bar, PageMeta, ApiResponse } from '@/types';
+import type { Post, Bar, MyBar, PageMeta, ApiResponse } from '@/types';
 import Link from 'next/link';
 import PostCard from '@/components/post/PostCard';
+import BarStatusBadge from '@/components/bar/BarStatusBadge';
+import useAuthStore from '@/lib/auth';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -18,9 +20,11 @@ export default function HomeClient({
   initialMeta,
   initialBars,
 }: HomeClientProps) {
+  const { user } = useAuthStore();
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [meta, setMeta] = useState<PageMeta>(initialMeta);
   const [bars, setBars] = useState<Bar[]>(initialBars);
+  const [myBars, setMyBars] = useState<MyBar[]>([]);
   const [loading, setLoading] = useState(false);
   const didFetchFallback = useRef(false);
 
@@ -57,6 +61,28 @@ export default function HomeClient({
     fetchFallback();
   }, [initialPosts.length, initialBars.length]);
 
+  // Fetch "My Bars" when user is logged in
+  useEffect(() => {
+    if (!user) {
+      setMyBars([]);
+      return;
+    }
+    async function fetchMyBars() {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_BASE}/api/users/me/bars?limit=20`, {
+          cache: 'no-store',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const json: ApiResponse<MyBar[]> = await res.json();
+          if (json.data) setMyBars(json.data);
+        }
+      } catch { /* ignore */ }
+    }
+    fetchMyBars();
+  }, [user]);
+
   const loadMore = async () => {
     if (!meta.hasMore || loading) return;
     setLoading(true);
@@ -78,6 +104,27 @@ export default function HomeClient({
 
   return (
     <div>
+      {/* My Bars section - shown when logged in */}
+      {user && myBars.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">我的吧</h2>
+          <div className="flex flex-wrap gap-2">
+            {myBars.map((bar) => (
+              <Link
+                key={bar.id}
+                href={`/bars/${bar.id}`}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-full text-sm text-gray-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 transition-colors"
+              >
+                {bar.name}
+                {bar.status !== 'active' && (
+                  <BarStatusBadge status={bar.status} />
+                )}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="mb-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-3">推荐吧</h2>
         {bars.length === 0 ? (

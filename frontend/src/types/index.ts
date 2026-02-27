@@ -2,6 +2,8 @@ export interface User {
   id: string;
   email: string;
   nickname: string;
+  avatarUrl?: string | null;
+  bio?: string | null;
   role: string;
   createdAt: string;
 }
@@ -10,9 +12,18 @@ export interface Bar {
   id: string;
   name: string;
   description: string;
+  avatarUrl?: string | null;
+  rules?: string | null;
   category?: string;
   status: string;
+  statusReason?: string | null;
+  suspendUntil?: string | null;
+  memberCount?: number;
+  isMember?: boolean | null;
+  memberRole?: string | null;
+  createdBy?: { id: string; nickname: string } | null;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Post {
@@ -35,6 +46,57 @@ export interface Reply {
   author?: User;
   floorNumber: number;
   content: string;
+  createdAt: string;
+}
+
+export interface MyPost {
+  id: string;
+  title: string;
+  barId: string;
+  barName: string | null;
+  replyCount: number;
+  createdAt: string;
+}
+
+export interface MyReply {
+  id: string;
+  content: string;
+  postId: string;
+  postTitle: string | null;
+  barName: string | null;
+  floorNumber: number;
+  createdAt: string;
+}
+
+export interface MyBar {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  statusReason?: string | null;
+  suspendUntil?: string | null;
+  memberCount: number;
+  joinedAt: string;
+}
+
+export interface CreatedBar {
+  id: string;
+  name: string;
+  status: string;
+  statusReason?: string | null;
+  suspendUntil?: string | null;
+  createdAt: string;
+}
+
+export interface AdminAction {
+  id: string;
+  action: string;
+  targetType: string;
+  targetId: string;
+  targetName: string | null;
+  adminId: string;
+  adminNickname: string | null;
+  reason: string | null;
   createdAt: string;
 }
 

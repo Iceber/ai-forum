@@ -29,7 +29,8 @@
 ┌─────────────────────────────────────────────────────┐
 │          PostgreSQL 15  (localhost:5432)              │
 │          数据库: aiforum                              │
-│          表: users, bars, bar_members, posts, replies │
+│          表: users, bars, bar_members, posts, replies,│
+│              admin_actions                             │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -60,9 +61,12 @@ AppModule (根模块)
 │   ├── → JwtModule (JWT 签发/验证)
 │   └── → PassportModule (认证策略)
 ├── UsersModule
-│   └── → TypeOrmModule.forFeature([User])
+│   └── → TypeOrmModule.forFeature([User, Post, Reply, BarMember, Bar])
 ├── BarsModule
 │   └── → TypeOrmModule.forFeature([Bar, BarMember])
+├── AdminModule
+│   ├── → TypeOrmModule.forFeature([Bar, AdminAction])
+│   └── → BarsModule
 ├── PostsModule
 │   └── → TypeOrmModule.forFeature([Post])
 └── RepliesModule
@@ -83,12 +87,18 @@ AppModule (根模块)
      │ 1:N (author)            1:N (bar→posts) │
      │         ┌──────────┐                    │
      └─────────│  posts   │────────────────────┘
-               │          │
-               └────┬─────┘
-                    │ 1:N (post→replies)
-               ┌────┴─────┐
-               │ replies   │──self── parent_reply_id (楼中楼，第一阶段置 null)
-               └──────────┘
+     │         │          │
+     │         └────┬─────┘
+     │              │ 1:N (post→replies)
+     │         ┌────┴─────┐
+     │         │ replies   │──self── parent_reply_id (楼中楼，第一阶段置 null)
+     │         └──────────┘
+     │
+     │ 1:N (admin→admin_actions)
+     │         ┌────────────────┐
+     └─────────│ admin_actions  │── target_id → bars/posts/... (逻辑外键)
+               │ (审计日志)      │
+               └────────────────┘
 ```
 
 ---
@@ -125,13 +135,16 @@ backend/
 ├── tsconfig.json             # TypeScript 编译配置
 ├── .env.example              # 环境变量模板
 ├── migrations/
-│   └── 001_initial_schema.sql  # 数据库初始化 DDL（手动迁移）
+│   ├── 001_initial_schema.sql    # 数据库初始化 DDL（手动迁移）
+│   └── 002_phase2_bars_admin.sql # Phase 2: 吧状态扩展 + 管理员操作表
 ├── src/
 │   ├── main.ts               # 应用启动入口（CORS、全局管道、前缀 /api）
 │   ├── app.module.ts         # 根模块（注册所有子模块、TypeORM、Config）
 │   ├── common/               # 全局公共基础设施
 │   │   ├── guards/
-│   │   │   └── jwt-auth.guard.ts       # JWT 认证守卫
+│   │   │   ├── jwt-auth.guard.ts       # JWT 认证守卫
+│   │   │   ├── admin.guard.ts          # 管理员角色守卫
+│   │   │   └── optional-auth.guard.ts  # 可选认证守卫（未登录返回 null）
 │   │   ├── decorators/
 │   │   │   └── current-user.decorator.ts  # @CurrentUser() 参数装饰器
 │   │   ├── response.interceptor.ts     # 统一响应信封包装
@@ -148,16 +161,20 @@ backend/
 │       │       └── login.dto.ts        # 登录参数校验
 │       ├── users/            # 用户模块
 │       │   ├── users.module.ts
-│       │   ├── users.service.ts        # 用户 CRUD
-│       │   └── user.entity.ts          # 用户实体
+│       │   ├── users.controller.ts    # 个人中心接口（我的帖子/回复/吧/资料）
+│       │   ├── users.service.ts        # 用户 CRUD + 个人中心查询
+│       │   ├── user.entity.ts          # 用户实体
+│       │   └── dto/
+│       │       └── update-profile.dto.ts # 更新个人资料参数校验
 │       ├── bars/             # 吧模块
 │       │   ├── bars.module.ts
-│       │   ├── bars.controller.ts      # 吧列表/详情
-│       │   ├── bars.service.ts         # 吧查询/创建
+│       │   ├── bars.controller.ts      # 吧列表/详情/创建/加入/退出
+│       │   ├── bars.service.ts         # 吧查询/创建/加入/退出
 │       │   ├── bar.entity.ts           # 吧实体
 │       │   ├── bar-member.entity.ts    # 吧成员实体
 │       │   └── dto/
-│       │       └── query-bars.dto.ts   # 列表查询参数
+│       │       ├── query-bars.dto.ts   # 列表查询参数
+│       │       └── create-bar.dto.ts   # 创建吧参数校验
 │       ├── posts/            # 帖子模块
 │       │   ├── posts.module.ts
 │       │   ├── posts.controller.ts     # 帖子列表/详情/创建
@@ -165,13 +182,23 @@ backend/
 │       │   ├── post.entity.ts          # 帖子实体
 │       │   └── dto/
 │       │       └── create-post.dto.ts  # 发帖参数校验
-│       └── replies/          # 回复模块
-│           ├── replies.module.ts
-│           ├── replies.controller.ts   # 回复列表/创建
-│           ├── replies.service.ts      # 回复 CRUD + 楼层号分配
-│           ├── reply.entity.ts         # 回复实体
+│       ├── replies/          # 回复模块
+│       │   ├── replies.module.ts
+│       │   ├── replies.controller.ts   # 回复列表/创建
+│       │   ├── replies.service.ts      # 回复 CRUD + 楼层号分配
+│       │   ├── reply.entity.ts         # 回复实体
+│       │   └── dto/
+│       │       └── create-reply.dto.ts # 回复参数校验
+│       └── admin/            # 管理员模块（Phase 2 新增）
+│           ├── admin.module.ts
+│           ├── admin.controller.ts     # 吧审核/管理/审计日志
+│           ├── admin.service.ts        # 管理操作业务逻辑
+│           ├── admin-action.entity.ts  # 管理操作审计实体
 │           └── dto/
-│               └── create-reply.dto.ts # 回复参数校验
+│               ├── reject-bar.dto.ts   # 拒绝吧参数校验
+│               ├── suspend-bar.dto.ts  # 暂停吧参数校验
+│               ├── ban-bar.dto.ts      # 封禁吧参数校验
+│               └── close-bar.dto.ts    # 关闭吧参数校验
 └── test/                     # 测试目录
 ```
 
@@ -179,15 +206,16 @@ backend/
 
 | 模块 | 职责 | 关键文件 |
 |------|------|----------|
-| **common/guards** | JWT 认证守卫，保护需登录的路由 | `jwt-auth.guard.ts` |
+| **common/guards** | JWT 认证守卫、管理员角色守卫、可选认证守卫 | `jwt-auth.guard.ts`, `admin.guard.ts`, `optional-auth.guard.ts` |
 | **common/decorators** | `@CurrentUser()` 从请求中提取当前用户 | `current-user.decorator.ts` |
 | **common/response.interceptor** | 将所有成功响应包装为 `{ data, meta, error }` 信封 | `response.interceptor.ts` |
 | **common/http-exception.filter** | 将所有异常转换为统一错误信封格式 | `http-exception.filter.ts` |
 | **auth** | 注册、登录、JWT 签发与验证 | `auth.controller.ts`, `auth.service.ts`, `jwt.strategy.ts` |
-| **users** | 用户实体定义与基础查询 | `user.entity.ts`, `users.service.ts` |
-| **bars** | 吧的列表查询、详情查询、内部创建（seed 使用，含 owner 成员写入） | `bars.controller.ts`, `bars.service.ts` |
+| **users** | 用户实体定义、基础查询、个人中心（我的帖子/回复/吧/资料编辑） | `user.entity.ts`, `users.controller.ts`, `users.service.ts` |
+| **bars** | 吧的列表查询、详情查询、用户创建吧（pending_review）、加入/退出吧、成员计数 | `bars.controller.ts`, `bars.service.ts` |
 | **posts** | 帖子的列表、详情、创建，回复计数更新 | `posts.controller.ts`, `posts.service.ts` |
 | **replies** | 回复的列表、创建，楼层号自动递增 | `replies.controller.ts`, `replies.service.ts` |
+| **admin** | 管理员吧审核（approve/reject/suspend/unsuspend/ban/close）、审计日志查询 | `admin.controller.ts`, `admin.service.ts`, `admin-action.entity.ts` |
 
 ### 3.3 前端目录 (`frontend/`)
 
@@ -214,6 +242,27 @@ frontend/
     │   │   └── page.tsx      # 注册页
     │   ├── create-post/
     │   │   └── page.tsx      # 发帖页（需登录）
+    │   ├── create-bar/
+    │   │   └── page.tsx      # 创建吧页（需登录）
+    │   ├── profile/
+    │   │   ├── layout.tsx    # 个人中心布局（侧边导航）
+    │   │   ├── page.tsx      # 个人中心首页（我的帖子）
+    │   │   ├── edit/
+    │   │   │   └── page.tsx  # 编辑个人资料
+    │   │   ├── bars/
+    │   │   │   └── page.tsx  # 我加入的吧
+    │   │   ├── created-bars/
+    │   │   │   └── page.tsx  # 我创建的吧
+    │   │   └── replies/
+    │   │       └── page.tsx  # 我的回复
+    │   ├── admin/
+    │   │   ├── layout.tsx    # 管理后台布局（导航标签）
+    │   │   ├── page.tsx      # 管理后台首页
+    │   │   ├── bars/
+    │   │   │   └── pending/
+    │   │   │       └── page.tsx  # 待审核吧列表
+    │   │   └── actions/
+    │   │       └── page.tsx  # 审计日志
     │   ├── bars/
     │   │   └── [id]/
     │   │       ├── page.tsx          # 吧详情页
@@ -226,17 +275,23 @@ frontend/
     │   ├── layout/
     │   │   └── Navbar.tsx    # 顶部导航栏
     │   ├── bar/
-    │   │   └── BarCard.tsx   # 吧卡片组件
+    │   │   ├── BarCard.tsx   # 吧卡片组件
+    │   │   ├── BarStatusBadge.tsx  # 吧状态标签（6 种状态颜色映射）
+    │   │   └── JoinBarButton.tsx   # 加入/退出吧按钮
     │   ├── post/
     │   │   └── PostCard.tsx  # 帖子卡片组件
-    │   └── reply/
-    │       └── ReplyItem.tsx # 回复楼层组件
+    │   ├── reply/
+    │   │   └── ReplyItem.tsx # 回复楼层组件
+    │   ├── profile/
+    │   │   └── ProfileNav.tsx # 个人中心侧边导航
+    │   └── admin/
+    │       └── AdminNav.tsx  # 管理后台导航标签
     ├── lib/                  # 工具库
     │   ├── api-client.ts     # Axios 实例（自动附加 JWT、401 处理）
     │   ├── auth.ts           # Zustand 登录态 Store（token + user）
     │   └── server-api.ts     # 服务端数据请求（SSR 多地址回退）
     └── types/
-        └── index.ts          # TypeScript 类型定义（User, Bar, Post, Reply, ApiResponse 等）
+        └── index.ts          # TypeScript 类型定义（User, Bar, Post, Reply, AdminAction, CreatedBar, MyBar, ApiResponse 等）
 ```
 
 #### 前端模块职责表
@@ -246,17 +301,22 @@ frontend/
 | **lib/api-client** | Axios 封装，自动附加 Bearer Token，401 自动清除登录态 | `api-client.ts` |
 | **lib/auth** | Zustand Store，管理 token/user 持久化到 localStorage | `auth.ts` |
 | **lib/server-api** | SSR 数据请求，支持 Docker 内部地址 → 公网地址多级回退 | `server-api.ts` |
-| **types** | 全局类型定义：`User`, `Bar`, `Post`, `Reply`, `PageMeta`, `ApiResponse` | `index.ts` |
-| **components/layout** | 顶部导航栏（Logo、发帖按钮、登录/登出） | `Navbar.tsx` |
-| **components/bar** | 吧卡片展示（名称 + 描述，点击跳转） | `BarCard.tsx` |
+| **types** | 全局类型定义：`User`, `Bar`, `Post`, `Reply`, `AdminAction`, `CreatedBar`, `MyBar`, `PageMeta`, `ApiResponse` | `index.ts` |
+| **components/layout** | 顶部导航栏（Logo、发帖按钮、登录/登出、个人中心/管理入口） | `Navbar.tsx` |
+| **components/bar** | 吧卡片展示、吧状态标签（6 种状态）、加入/退出吧按钮 | `BarCard.tsx`, `BarStatusBadge.tsx`, `JoinBarButton.tsx` |
 | **components/post** | 帖子卡片（标题、内容摘要、作者、吧名、回复数） | `PostCard.tsx` |
 | **components/reply** | 回复楼层（楼层号、作者、时间、内容） | `ReplyItem.tsx` |
+| **components/profile** | 个人中心侧边导航（我的帖子/回复/吧/创建的吧/编辑资料） | `ProfileNav.tsx` |
+| **components/admin** | 管理后台导航标签（待审核/吧管理/审计日志） | `AdminNav.tsx` |
 | **app/page + HomeClient** | 首页：帖子流 + 吧推荐 + 无限加载 | `page.tsx`, `HomeClient.tsx` |
 | **app/login** | 登录页：邮箱 + 密码，登录后跳转首页 | `login/page.tsx` |
 | **app/register** | 注册页：邮箱 + 密码 + 昵称，注册后自动登录 | `register/page.tsx` |
 | **app/create-post** | 发帖页：选择吧 + 标题 + 内容，需登录 | `create-post/page.tsx` |
-| **app/bars/[id]** | 吧详情页：吧信息 + 吧内帖子列表 | `bars/[id]/page.tsx`, `BarPostsClient.tsx` |
+| **app/create-bar** | 创建吧页：名称 + 描述 + 分类 + 吧规，需登录，提交后 pending_review | `create-bar/page.tsx` |
+| **app/bars/[id]** | 吧详情页：吧信息 + 吧内帖子列表 + 加入/退出按钮 | `bars/[id]/page.tsx`, `BarPostsClient.tsx` |
 | **app/posts/[id]** | 帖子详情页：主楼 + 回复列表 + 回复输入 | `posts/[id]/page.tsx`, `PostRepliesClient.tsx` |
+| **app/profile** | 个人中心：我的帖子/回复/加入的吧/创建的吧/编辑资料 | `profile/layout.tsx`, `profile/page.tsx` 等 |
+| **app/admin** | 管理后台：待审核吧列表、吧管理操作、审计日志 | `admin/layout.tsx`, `admin/page.tsx` 等 |
 
 ---
 
@@ -289,12 +349,19 @@ frontend/
 | `avatar_url` | VARCHAR(500) | NULL | 吧头像（预留） |
 | `rules` | TEXT | NULL | 吧规（预留） |
 | `category` | VARCHAR(100) | NULL | 吧分类（预留） |
-| `status` | VARCHAR(20) | DEFAULT 'active' | 状态：`active` / `archived` |
+| `status` | VARCHAR(20) | DEFAULT 'pending_review' | 状态：`pending_review` / `active` / `rejected` / `suspended` / `permanently_banned` / `closed` |
+| `status_reason` | TEXT | NULL | 状态变更原因（拒绝/暂停/封禁/关闭理由） |
+| `suspend_until` | TIMESTAMPTZ | NULL | 暂停到期时间（仅 suspended 状态使用） |
+| `member_count` | INTEGER | DEFAULT 0 | 成员数（冗余计数，加入/退出时更新） |
 | `created_by` | UUID | FK → users.id | 创建者 |
+| `reviewed_by` | UUID | FK → users.id, NULL | 审核管理员 |
+| `reviewed_at` | TIMESTAMPTZ | NULL | 审核时间 |
 | `created_at` | TIMESTAMPTZ | DEFAULT NOW() | 创建时间 |
 | `updated_at` | TIMESTAMPTZ | DEFAULT NOW() | 更新时间 |
 
 ### 4.3 bar_members（吧成员表）
+
+> Phase 2 启用：用户可通过 POST /api/bars/:id/join 加入吧，POST /api/bars/:id/leave 退出吧。加入/退出时同步更新 bars.member_count。
 
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
@@ -341,6 +408,36 @@ frontend/
 | `updated_at` | TIMESTAMPTZ | DEFAULT NOW() | 更新时间 |
 
 **索引**: `(post_id, floor_number)` — 帖子回复楼层查询
+
+### 4.6 admin_actions（管理操作审计表）
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | UUID | PK | 操作记录 ID |
+| `admin_id` | UUID | FK → users.id, NOT NULL, ON DELETE RESTRICT | 操作管理员 |
+| `action` | VARCHAR(50) | NOT NULL | 操作类型（如 `approve_bar`, `reject_bar`, `suspend_bar`, `unsuspend_bar`, `ban_bar`, `close_bar`） |
+| `target_type` | VARCHAR(20) | NOT NULL | 目标类型（如 `bar`） |
+| `target_id` | UUID | NOT NULL | 目标资源 ID（逻辑外键） |
+| `reason` | TEXT | NULL | 操作理由 |
+| `metadata` | JSONB | NULL | 附加元数据（如暂停时长） |
+| `created_at` | TIMESTAMPTZ | DEFAULT NOW() | 操作时间 |
+
+**索引**:
+- `(admin_id, created_at)` — 按管理员查询操作历史
+- `(target_type, target_id)` — 按目标查询操作历史
+- `(created_at)` — 审计日志时间排序
+
+### 4.7 索引汇总
+
+| 表 | 索引 | 用途 |
+|------|------|------|
+| `posts` | `(bar_id, created_at)` | 吧内帖子列表查询 |
+| `replies` | `(post_id, floor_number)` | 帖子回复楼层查询 |
+| `bars` | `(status, created_at)` | 按状态查询吧列表 |
+| `bars` | `(created_by)` | 查询用户创建的吧 |
+| `admin_actions` | `(admin_id, created_at)` | 管理员操作历史 |
+| `admin_actions` | `(target_type, target_id)` | 目标操作历史 |
+| `admin_actions` | `(created_at)` | 审计日志时间排序 |
 
 ---
 
@@ -481,7 +578,7 @@ frontend/
 
 #### `GET /api/bars` — 获取吧列表
 
-- **认证**: 无需
+- **认证**: 可选（OptionalAuthGuard，登录用户可获取 isMember 状态）
 - **查询参数**:
   | 参数 | 类型 | 必填 | 默认值 | 说明 |
   |------|------|------|--------|------|
@@ -497,6 +594,8 @@ frontend/
         "name": "技术讨论",
         "description": "讨论编程与技术趋势",
         "status": "active",
+        "memberCount": 42,
+        "isMember": true,
         "createdAt": "...",
         "updatedAt": "..."
       }
@@ -508,7 +607,7 @@ frontend/
 
 #### `GET /api/bars/:id` — 获取吧详情
 
-- **认证**: 无需
+- **认证**: 可选（OptionalAuthGuard）
 - **路径参数**: `id` — 吧 UUID
 - **成功响应** (200):
   ```json
@@ -521,6 +620,8 @@ frontend/
       "rules": null,
       "category": null,
       "status": "active",
+      "memberCount": 42,
+      "isMember": true,
       "createdBy": { "id": "uuid", "nickname": "管理员" },
       "createdAt": "...",
       "updatedAt": "..."
@@ -529,6 +630,43 @@ frontend/
     "error": null
   }
   ```
+
+#### `POST /api/bars` — 创建吧
+
+- **认证**: 需要 (Bearer Token)
+- **请求体**:
+  ```json
+  {
+    "name": "新吧名称",
+    "description": "吧描述",
+    "category": "技术",
+    "rules": "吧规内容",
+    "avatarUrl": "https://..."
+  }
+  ```
+  | 字段 | 类型 | 必填 | 校验 |
+  |------|------|------|------|
+  | name | string | 是 | 2-100 字符 |
+  | description | string | 是 | 不为空 |
+  | category | string | 否 | 最大 100 字符 |
+  | rules | string | 否 | — |
+  | avatarUrl | string | 否 | 合法 URL，最大 500 字符 |
+
+- **成功响应** (201): 返回创建的吧对象，状态为 `pending_review`
+
+#### `POST /api/bars/:id/join` — 加入吧
+
+- **认证**: 需要 (Bearer Token)
+- **路径参数**: `id` — 吧 UUID
+- **成功响应** (201): 返回成员记录
+- **错误**: 吧非 active 状态 → 403；已是成员 → 409
+
+#### `POST /api/bars/:id/leave` — 退出吧
+
+- **认证**: 需要 (Bearer Token)
+- **路径参数**: `id` — 吧 UUID
+- **成功响应** (200): 确认退出
+- **错误**: 吧主不能退出 → 403；非成员 → 404
 
 ---
 
@@ -649,20 +787,160 @@ frontend/
 
 ---
 
-### 5.6 API 接口汇总表
+### 5.6 Admin 管理接口
+
+> 所有管理接口需要 `JwtAuthGuard` + `AdminGuard`（`user.role === 'admin'`）。
+
+#### `GET /api/admin/bars` — 获取吧列表（管理视图）
+
+- **认证**: 需要 (Bearer Token + Admin 角色)
+- **查询参数**:
+  | 参数 | 类型 | 必填 | 默认值 | 说明 |
+  |------|------|------|--------|------|
+  | status | string | 否 | - | 按状态筛选（如 `pending_review`） |
+  | cursor | string | 否 | - | 分页游标 |
+  | limit | number | 否 | 20 | 每页数量，最大 100 |
+
+- **成功响应** (200): 返回吧列表（含所有状态字段）
+
+#### `POST /api/admin/bars/:id/approve` — 审批通过
+
+- **认证**: 需要 (Bearer Token + Admin 角色)
+- **成功响应** (200): 吧状态变为 `active`，记录审计日志
+
+#### `POST /api/admin/bars/:id/reject` — 拒绝
+
+- **认证**: 需要 (Bearer Token + Admin 角色)
+- **请求体**: `{ "reason": "拒绝理由" }`
+- **成功响应** (200): 吧状态变为 `rejected`，记录审计日志
+
+#### `POST /api/admin/bars/:id/suspend` — 暂停
+
+- **认证**: 需要 (Bearer Token + Admin 角色)
+- **请求体**: `{ "reason": "暂停理由", "duration": 7 }`（duration 为天数）
+- **成功响应** (200): 吧状态变为 `suspended`，设置 `suspend_until`
+
+#### `POST /api/admin/bars/:id/unsuspend` — 解除暂停
+
+- **认证**: 需要 (Bearer Token + Admin 角色)
+- **成功响应** (200): 吧状态恢复为 `active`
+
+#### `POST /api/admin/bars/:id/ban` — 永久封禁
+
+- **认证**: 需要 (Bearer Token + Admin 角色)
+- **请求体**: `{ "reason": "封禁理由" }`
+- **成功响应** (200): 吧状态变为 `permanently_banned`
+
+#### `POST /api/admin/bars/:id/close` — 关闭
+
+- **认证**: 需要 (Bearer Token + Admin 角色)
+- **请求体**: `{ "reason": "关闭理由" }`
+- **成功响应** (200): 吧状态变为 `closed`
+
+#### `GET /api/admin/actions` — 审计日志
+
+- **认证**: 需要 (Bearer Token + Admin 角色)
+- **查询参数**: `cursor`, `limit`
+- **成功响应** (200):
+  ```json
+  {
+    "data": [
+      {
+        "id": "uuid",
+        "action": "approve_bar",
+        "targetType": "bar",
+        "targetId": "uuid",
+        "targetName": "技术讨论",
+        "adminId": "uuid",
+        "adminNickname": "管理员",
+        "reason": null,
+        "createdAt": "..."
+      }
+    ],
+    "meta": { "cursor": "...", "hasMore": true },
+    "error": null
+  }
+  ```
+
+---
+
+### 5.7 Users 个人中心接口
+
+> 所有个人中心接口需要 `JwtAuthGuard`。
+
+#### `GET /api/users/me/posts` — 我的帖子
+
+- **认证**: 需要 (Bearer Token)
+- **查询参数**: `cursor`, `limit`
+- **成功响应** (200): 返回当前用户的帖子列表（cursor 分页）
+
+#### `GET /api/users/me/replies` — 我的回复
+
+- **认证**: 需要 (Bearer Token)
+- **查询参数**: `cursor`, `limit`
+- **成功响应** (200): 返回当前用户的回复列表（cursor 分页）
+
+#### `GET /api/users/me/bars` — 我加入的吧
+
+- **认证**: 需要 (Bearer Token)
+- **查询参数**: `cursor`, `limit`
+- **成功响应** (200): 返回当前用户加入的吧列表（cursor 分页）
+
+#### `GET /api/users/me/created-bars` — 我创建的吧
+
+- **认证**: 需要 (Bearer Token)
+- **查询参数**: `cursor`, `limit`
+- **成功响应** (200): 返回当前用户创建的吧列表（含状态信息，cursor 分页）
+
+#### `PATCH /api/users/me/profile` — 更新个人资料
+
+- **认证**: 需要 (Bearer Token)
+- **请求体**:
+  ```json
+  {
+    "nickname": "新昵称",
+    "bio": "个人签名"
+  }
+  ```
+  | 字段 | 类型 | 必填 | 校验 |
+  |------|------|------|------|
+  | nickname | string | 否 | 2-50 字符 |
+  | bio | string | 否 | 最大 500 字符 |
+
+- **成功响应** (200): 返回更新后的用户对象
+
+---
+
+### 5.8 API 接口汇总表
 
 | 方法 | 路径 | 认证 | 说明 |
 |------|------|------|------|
 | POST | `/api/auth/register` | 否 | 用户注册 |
 | POST | `/api/auth/login` | 否 | 用户登录 |
 | GET | `/api/auth/me` | 是 | 获取当前用户信息 |
-| GET | `/api/bars` | 否 | 吧列表（cursor 分页） |
-| GET | `/api/bars/:id` | 否 | 吧详情 |
+| GET | `/api/bars` | 可选 | 吧列表（cursor 分页，登录可返回 isMember） |
+| GET | `/api/bars/:id` | 可选 | 吧详情（登录可返回 isMember） |
+| POST | `/api/bars` | 是 | 创建吧（状态为 pending_review） |
+| POST | `/api/bars/:id/join` | 是 | 加入吧 |
+| POST | `/api/bars/:id/leave` | 是 | 退出吧 |
 | GET | `/api/posts` | 否 | 帖子列表（可按 barId 筛选，cursor 分页） |
 | GET | `/api/posts/:id` | 否 | 帖子详情 |
 | POST | `/api/posts` | 是 | 创建帖子 |
 | GET | `/api/posts/:postId/replies` | 否 | 帖子回复列表（cursor 分页） |
 | POST | `/api/posts/:postId/replies` | 是 | 创建回复 |
+| GET | `/api/users/me/posts` | 是 | 我的帖子 |
+| GET | `/api/users/me/replies` | 是 | 我的回复 |
+| GET | `/api/users/me/bars` | 是 | 我加入的吧 |
+| GET | `/api/users/me/created-bars` | 是 | 我创建的吧 |
+| PATCH | `/api/users/me/profile` | 是 | 更新个人资料 |
+| GET | `/api/admin/bars` | 是 (Admin) | 管理视图吧列表（可按 status 筛选） |
+| POST | `/api/admin/bars/:id/approve` | 是 (Admin) | 审批通过吧 |
+| POST | `/api/admin/bars/:id/reject` | 是 (Admin) | 拒绝吧 |
+| POST | `/api/admin/bars/:id/suspend` | 是 (Admin) | 暂停吧 |
+| POST | `/api/admin/bars/:id/unsuspend` | 是 (Admin) | 解除暂停 |
+| POST | `/api/admin/bars/:id/ban` | 是 (Admin) | 永久封禁吧 |
+| POST | `/api/admin/bars/:id/close` | 是 (Admin) | 关闭吧 |
+| GET | `/api/admin/actions` | 是 (Admin) | 审计日志 |
 
 ---
 
@@ -674,8 +952,17 @@ frontend/
 | 登录 | `/login` | CSR | `POST /api/auth/login` |
 | 注册 | `/register` | CSR | `POST /api/auth/register` |
 | 发帖 | `/create-post` | CSR（需登录） | `GET /api/bars`, `POST /api/posts` |
-| 吧详情 | `/bars/[id]` | CSR | `GET /api/bars/:id`, `GET /api/posts?barId=...&limit=20` |
+| 创建吧 | `/create-bar` | CSR（需登录） | `POST /api/bars` |
+| 吧详情 | `/bars/[id]` | CSR | `GET /api/bars/:id`, `GET /api/posts?barId=...&limit=20`, `POST /api/bars/:id/join`, `POST /api/bars/:id/leave` |
 | 帖子详情 | `/posts/[id]` | CSR | `GET /api/posts/:id`, `GET /api/posts/:id/replies?limit=50` |
+| 个人中心 — 我的帖子 | `/profile` | CSR（需登录） | `GET /api/users/me/posts` |
+| 个人中心 — 我的回复 | `/profile/replies` | CSR（需登录） | `GET /api/users/me/replies` |
+| 个人中心 — 我的吧 | `/profile/bars` | CSR（需登录） | `GET /api/users/me/bars` |
+| 个人中心 — 我创建的吧 | `/profile/created-bars` | CSR（需登录） | `GET /api/users/me/created-bars` |
+| 个人中心 — 编辑资料 | `/profile/edit` | CSR（需登录） | `GET /api/auth/me`, `PATCH /api/users/me/profile` |
+| 管理后台 — 待审核 | `/admin/bars/pending` | CSR（需 Admin） | `GET /api/admin/bars?status=pending_review` |
+| 管理后台 — 吧管理 | `/admin` | CSR（需 Admin） | `GET /api/admin/bars`, `POST /api/admin/bars/:id/{action}` |
+| 管理后台 — 审计日志 | `/admin/actions` | CSR（需 Admin） | `GET /api/admin/actions` |
 
 ---
 
@@ -714,13 +1001,12 @@ services:
 
 ---
 
-## 9. 第二阶段扩展预留
+## 9. 第三阶段扩展预留
 
 当前架构已为后续功能预留以下扩展点：
 
 | 预留点 | 当前状态 | 扩展方向 |
 |--------|---------|---------|
-| `bar_members` 表 | 仅创建吧时写入 owner | 加入/退出吧、吧务管理 |
 | `parent_reply_id` 字段 | 第一阶段置 null | 二级回复（楼中楼） |
 | `content_type` 字段 | 仅 plaintext | Markdown / 富文本渲染 |
 | `status` + `deleted_at` | 仅 published | 审核队列、软删除流程 |
@@ -729,3 +1015,5 @@ services:
 | `auth_provider` | 默认 local | 第三方 OAuth 登录 |
 | AI embedding | 未实现 | pgvector 内容向量化、相关帖推荐 |
 | moderation_logs | 未实现 | AI 审核 + 人工治理日志 |
+| 吧主/版主管理 | bar_members role 已预留 | 版主任命、吧内内容管理 |
+| 通知系统 | 未实现 | 审核结果通知、回复通知 |
