@@ -54,7 +54,7 @@
 - 回复输入框增加“引用”图标，点击后自动填充被引用楼层的内容（格式：`> @用户名：内容`）。
 
 ### 3.2 点赞/收藏状态一致性
-- 帖子详情接口返回 `isLiked`、`isFavorited` 字段（登录用户），未登录时返回 `null`；回复列表仅返回 `isLiked`（回复不可收藏）。
+- 帖子详情接口返回 `isLiked`、`isFavorited` 字段（登录用户），未登录时返回 `null`；回复列表仅返回 `isLiked`（回复不可收藏），且未登录时 `isLiked` 返回 `null`。
 - 点赞/收藏操作使用乐观更新：前端立即变更 UI，若请求失败则回滚并提示。
 - 点赞/收藏按钮附带计数，点击后计数瞬时变化。
 
@@ -140,7 +140,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 ## 5. 后端 API 设计
 
 ### 5.1 通用说明
-- 所有接口遵循 `DOC/arch.md` 定义的统一响应格式、认证方式（JWT）、错误码规范。
+- 所有接口遵循 `DOC/arch.md` 定义的统一响应格式、错误码规范；认证按接口定义执行（需登录接口使用 JWT）。
 - 分页采用 cursor 分页，游标编码规则与第二阶段一致（base64 编码的排序字段值）。
 - 涉及计数的冗余字段（如 `like_count`）在事务内同步更新。
 - 所有针对吧的管理操作（编辑资料、成员管理、成员列表读取、隐藏、删除等）需检查吧状态：仅当吧状态为 `active` 或 `suspended` 时允许操作；若吧状态为 `permanently_banned` 或 `closed`，返回 `403 FORBIDDEN`，错误码 `BAR_NOT_MANAGEABLE`。
@@ -250,12 +250,13 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
     "author": { "id": "uuid", "nickname": "用户" },
     "createdAt": "2025-01-01T00:00:00.000Z",
     "likeCount": 3,
-    "isLiked": false,
+    "isLiked": null,
     "isAuthor": false,
     "parentReplyId": "uuid",
     "floorNumber": null
   }
   ```
+- **说明**：`isLiked` 在登录用户场景返回 `true/false`，未登录场景返回 `null`。
 
 ### 5.4 互动接口
 
@@ -362,6 +363,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
   "isFavorited": false
 }
 ```
+> 以上帖子详情与主楼回复列表示例均为登录用户场景；未登录时互动态字段返回 `null`。
 
 > 回复不支持收藏：`GET /api/posts/:postId/replies` 的返回项不包含 `isFavorited` 字段。
 
@@ -386,7 +388,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 |------|----------|
 | **首页 `/`** | 帖子卡片展示点赞/收藏计数；点击点赞/收藏图标直接操作（需登录） |
 | **吧详情 `/bars/[id]`** | 增加成员数展示；吧主/版主可见“管理”下拉菜单（编辑资料、成员管理） |
-| **帖子详情 `/posts/[id]`** | 增加点赞/收藏/分享按钮；回复区展示楼主标识；楼中楼回复折叠区；作者/吧务可见删除按钮；Markdown 渲染支持 |
+| **帖子详情 `/posts/[id]`** | 增加点赞/收藏/分享按钮；回复区展示楼主标识；楼中楼回复折叠区；作者/吧务可见删除按钮；Markdown 渲染支持；未登录时 `isLiked = null` 按未激活态展示 |
 | **发帖 `/create-post`** | 增加 Markdown 编辑模式切换；图片上传按钮（调用预签名接口并插入 Markdown） |
 | **个人中心 `/profile`** | 增加“我的收藏”页签 |
 
@@ -397,7 +399,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 | `components/interaction/LikeButton.tsx` | 点赞按钮（传入目标类型和 ID，管理点赞状态） |
 | `components/interaction/FavoriteButton.tsx` | 收藏按钮 |
 | `components/interaction/ShareButton.tsx` | 分享按钮（复制链接） |
-| `components/reply/ChildReplies.tsx` | 楼中楼子回复折叠区（接收父回复 ID，管理分页加载） |
+| `components/reply/ChildReplies.tsx` | 楼中楼子回复折叠区（接收父回复 ID，管理分页加载，并处理未登录 `isLiked = null` 展示） |
 | `components/editor/MarkdownEditor.tsx` | 基于简单文本编辑器的 Markdown 编辑器（支持预览） |
 | `components/editor/ImageUpload.tsx` | 图片上传组件（调用预签名接口，上传后插入内容） |
 | `components/bar/BarManageMenu.tsx` | 吧管理下拉菜单（编辑资料、成员管理） |
@@ -473,4 +475,4 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 - 旧版“头像编辑（`PATCH /api/users/me/profile` 扩展 `avatarUrl`）”与本阶段边界冲突，已移除，保持与第二阶段一致。
 - 旧版“扩展 `admin_actions` 记录吧务隐藏操作”与本版要求冲突，已修订为“`admin_actions` 不扩展”。
 - 吧务操作与删除/隐藏操作统一增加吧状态可管理校验，避免与第二阶段状态模型冲突。
-- 所有新增接口均遵循 `DOC/arch.md` 的响应信封、JWT 认证、cursor 分页规则。
+- 所有新增接口均遵循 `DOC/arch.md` 的响应信封、cursor 分页规则；认证按接口定义执行（需登录接口使用 JWT）。
