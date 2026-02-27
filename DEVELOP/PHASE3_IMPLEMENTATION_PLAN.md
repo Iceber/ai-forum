@@ -54,7 +54,7 @@
 - 回复输入框增加“引用”图标，点击后自动填充被引用楼层的内容（格式：`> @用户名：内容`）。
 
 ### 3.2 点赞/收藏状态一致性
-- 帖子详情接口返回 `isLiked`、`isFavorited` 字段（登录用户），未登录时返回 `null`；回复列表仅返回 `isLiked`（回复不可收藏），且未登录时 `isLiked` 返回 `null`。
+- 帖子详情接口返回 `isLiked`、`isFavorited` 字段（登录用户），未登录时返回 `null`；回复列表仅返回 `isLiked`（回复不可收藏），未登录时同样返回 `null`。
 - 点赞/收藏操作使用乐观更新：前端立即变更 UI，若请求失败则回滚并提示。
 - 点赞/收藏按钮附带计数，点击后计数瞬时变化。
 
@@ -363,7 +363,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
   "isFavorited": false
 }
 ```
-> 以上帖子详情与主楼回复列表示例均为登录用户场景；未登录时互动态字段返回 `null`。
+> 以上帖子详情与主楼回复列表示例均为登录用户场景；未登录时互动状态字段返回 `null`。
 
 > 回复不支持收藏：`GET /api/posts/:postId/replies` 的返回项不包含 `isFavorited` 字段。
 
