@@ -6,7 +6,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, IsNull, MoreThan } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { Reply } from './reply.entity';
 import { Post } from '../posts/post.entity';
 import { Bar } from '../bars/bar.entity';
@@ -87,54 +87,65 @@ export class RepliesService {
     // Get the post to determine author for isAuthor flag
     const post = await this.postsRepository.findOne({ where: { id: postId } });
 
-    // Enrich with isLiked, isAuthor, childCount, and child preview
-    const data = await Promise.all(
-      items.map(async (reply) => {
-        let isLiked: boolean | null = null;
-        if (userId) {
-          const like = await this.likesRepository.findOne({
-            where: { userId, targetType: 'reply', targetId: reply.id },
-          });
-          isLiked = !!like;
+    const replyIds = items.map((r) => r.id);
+
+    // Batch fetch likes for all replies
+    const likedIdSet = new Set<string>();
+    if (userId && replyIds.length > 0) {
+      const likes = await this.likesRepository
+        .createQueryBuilder('like')
+        .where('like.userId = :userId', { userId })
+        .andWhere('like.targetType = :type', { type: 'reply' })
+        .andWhere('like.targetId IN (:...ids)', { ids: replyIds })
+        .getMany();
+      for (const like of likes) likedIdSet.add(like.targetId);
+    }
+
+    // Batch fetch earliest 3 child replies per parent using a lateral-join-like approach
+    const childPreviewMap = new Map<string, Reply[]>();
+    if (replyIds.length > 0) {
+      const allChildren = await this.repliesRepository
+        .createQueryBuilder('reply')
+        .leftJoinAndSelect('reply.author', 'author')
+        .where('reply.parentReplyId IN (:...ids)', { ids: replyIds })
+        .andWhere('reply.status = :status', { status: 'published' })
+        .andWhere('reply.deletedAt IS NULL')
+        .orderBy('reply.createdAt', 'ASC')
+        .getMany();
+
+      for (const child of allChildren) {
+        const parentId = child.parentReplyId!;
+        const list = childPreviewMap.get(parentId) ?? [];
+        if (list.length < 3) {
+          list.push(child);
+          childPreviewMap.set(parentId, list);
         }
+      }
+    }
 
-        // Get earliest 3 child replies as preview
-        const childPreview = await this.repliesRepository.find({
-          where: {
-            parentReplyId: reply.id,
-            status: 'published',
-            deletedAt: IsNull(),
-          },
-          order: { createdAt: 'ASC' },
-          take: 3,
-          relations: ['author'],
-        });
-
-        return {
-          id: reply.id,
-          postId: reply.postId,
-          authorId: reply.authorId,
-          author: reply.author,
-          floorNumber: reply.floorNumber,
-          content: reply.content,
-          contentType: reply.contentType,
-          likeCount: reply.likeCount,
-          childCount: reply.childCount,
-          isLiked,
-          isAuthor: post ? reply.authorId === post.authorId : false,
-          parentReplyId: reply.parentReplyId,
-          childPreview: childPreview.map((c) => ({
-            id: c.id,
-            content: c.content,
-            contentType: c.contentType,
-            author: c.author,
-            createdAt: c.createdAt,
-            likeCount: c.likeCount,
-          })),
-          createdAt: reply.createdAt,
-        };
-      }),
-    );
+    const data = items.map((reply) => ({
+      id: reply.id,
+      postId: reply.postId,
+      authorId: reply.authorId,
+      author: reply.author,
+      floorNumber: reply.floorNumber,
+      content: reply.content,
+      contentType: reply.contentType,
+      likeCount: reply.likeCount,
+      childCount: reply.childCount,
+      isLiked: userId ? likedIdSet.has(reply.id) : null,
+      isAuthor: post ? reply.authorId === post.authorId : false,
+      parentReplyId: reply.parentReplyId,
+      childPreview: (childPreviewMap.get(reply.id) ?? []).map((c) => ({
+        id: c.id,
+        content: c.content,
+        contentType: c.contentType,
+        author: c.author,
+        createdAt: c.createdAt,
+        likeCount: c.likeCount,
+      })),
+      createdAt: reply.createdAt,
+    }));
 
     return {
       data,
@@ -186,32 +197,33 @@ export class RepliesService {
       where: { id: parent.postId },
     });
 
-    const data = await Promise.all(
-      items.map(async (reply) => {
-        let isLiked: boolean | null = null;
-        if (userId) {
-          const like = await this.likesRepository.findOne({
-            where: { userId, targetType: 'reply', targetId: reply.id },
-          });
-          isLiked = !!like;
-        }
+    // Batch fetch likes for all child replies
+    const childIds = items.map((r) => r.id);
+    const likedIdSet = new Set<string>();
+    if (userId && childIds.length > 0) {
+      const likes = await this.likesRepository
+        .createQueryBuilder('like')
+        .where('like.userId = :userId', { userId })
+        .andWhere('like.targetType = :type', { type: 'reply' })
+        .andWhere('like.targetId IN (:...ids)', { ids: childIds })
+        .getMany();
+      for (const like of likes) likedIdSet.add(like.targetId);
+    }
 
-        return {
-          id: reply.id,
-          content: reply.content,
-          contentType: reply.contentType,
-          author: reply.author
-            ? { id: reply.author.id, nickname: reply.author.nickname }
-            : null,
-          createdAt: reply.createdAt,
-          likeCount: reply.likeCount,
-          isLiked,
-          isAuthor: post ? reply.authorId === post.authorId : false,
-          parentReplyId: reply.parentReplyId,
-          floorNumber: reply.floorNumber,
-        };
-      }),
-    );
+    const data = items.map((reply) => ({
+      id: reply.id,
+      content: reply.content,
+      contentType: reply.contentType,
+      author: reply.author
+        ? { id: reply.author.id, nickname: reply.author.nickname }
+        : null,
+      createdAt: reply.createdAt,
+      likeCount: reply.likeCount,
+      isLiked: userId ? likedIdSet.has(reply.id) : null,
+      isAuthor: post ? reply.authorId === post.authorId : false,
+      parentReplyId: reply.parentReplyId,
+      floorNumber: reply.floorNumber,
+    }));
 
     return {
       data,
