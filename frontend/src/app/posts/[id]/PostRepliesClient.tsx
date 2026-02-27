@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import type { Reply, ChildReply } from '@/types';
 import ReplyItem from '@/components/reply/ReplyItem';
 import useAuthStore from '@/lib/auth';
@@ -23,69 +23,89 @@ export default function PostRepliesClient({
 }: PostRepliesClientProps) {
   const { user } = useAuthStore();
   const [replies, setReplies] = useState<Reply[]>(initialReplies);
-  const [content, setContent] = useState('');
-  const [replyingTo, setReplyingTo] = useState<string | null>(null);
-  const [replyingToNickname, setReplyingToNickname] = useState<string>('');
-  const [submitting, setSubmitting] = useState(false);
+  const [topLevelContent, setTopLevelContent] = useState('');
+  const [nestedContent, setNestedContent] = useState('');
+  const [nestedParentId, setNestedParentId] = useState<string | null>(null);
+  const [nestedReplyToNickname, setNestedReplyToNickname] = useState('');
+  const [submittingTopLevel, setSubmittingTopLevel] = useState(false);
+  const [submittingNested, setSubmittingNested] = useState(false);
   const [error, setError] = useState('');
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const toChildReply = (reply: Reply, parentId: string): ChildReply => ({
+    id: reply.id,
+    content: reply.content,
+    contentType: reply.contentType,
+    author: reply.author
+      ? { id: reply.author.id, nickname: reply.author.nickname }
+      : null,
+    createdAt: reply.createdAt,
+    likeCount: reply.likeCount ?? 0,
+    isLiked: false,
+    isAuthor: reply.isAuthor,
+    parentReplyId: reply.parentReplyId ?? parentId,
+    floorNumber: reply.floorNumber,
+  });
+
+  const submitReply = async (content: string, parentReplyId?: string) => {
+    const body: Record<string, string> = { content: content.trim() };
+    if (parentReplyId) body.parentReplyId = parentReplyId;
+    const res = await apiClient.post<Reply>(`/api/posts/${postId}/replies`, body);
+
+    if (!parentReplyId) {
+      setReplies((prev) => [...prev, res.data]);
+      return;
+    }
+
+    const createdChild = toChildReply(res.data, parentReplyId);
+    setReplies((prev) =>
+      prev.map((reply) =>
+        reply.id === parentReplyId
+          ? {
+              ...reply,
+              childCount: (reply.childCount ?? 0) + 1,
+              childPreview: [...(reply.childPreview ?? []), createdChild],
+            }
+          : reply,
+      ),
+    );
+  };
+
+  const handleSubmitTopLevel = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim()) return;
-    setSubmitting(true);
+    if (!topLevelContent.trim()) return;
+    setSubmittingTopLevel(true);
     setError('');
     try {
-      const body: Record<string, string> = { content: content.trim() };
-      if (replyingTo) body.parentReplyId = replyingTo;
-
-      const res = await apiClient.post<Reply>(`/api/posts/${postId}/replies`, body);
-      if (!replyingTo) {
-        setReplies((prev) => [...prev, res.data]);
-      } else {
-        const createdChild: ChildReply = {
-          id: res.data.id,
-          content: res.data.content,
-          contentType: res.data.contentType,
-          author: res.data.author
-            ? { id: res.data.author.id, nickname: res.data.author.nickname }
-            : null,
-          createdAt: res.data.createdAt,
-          likeCount: res.data.likeCount ?? 0,
-          isLiked: false,
-          isAuthor: res.data.isAuthor,
-          parentReplyId: res.data.parentReplyId ?? replyingTo,
-          floorNumber: res.data.floorNumber,
-        };
-        setReplies((prev) =>
-          prev.map((reply) =>
-            reply.id === replyingTo
-              ? {
-                  ...reply,
-                  childCount: (reply.childCount ?? 0) + 1,
-                  childPreview: [...(reply.childPreview ?? []), createdChild],
-                }
-              : reply,
-          ),
-        );
-      }
-      setContent('');
-      setReplyingTo(null);
-      setReplyingToNickname('');
+      await submitReply(topLevelContent);
+      setTopLevelContent('');
     } catch (err) {
       setError(err instanceof Error ? err.message : '提交失败');
     } finally {
-      setSubmitting(false);
+      setSubmittingTopLevel(false);
+    }
+  };
+
+  const handleSubmitNested = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nestedParentId || !nestedContent.trim()) return;
+    setSubmittingNested(true);
+    setError('');
+    try {
+      await submitReply(nestedContent, nestedParentId);
+      setNestedContent('');
+      setNestedParentId(null);
+      setNestedReplyToNickname('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '提交失败');
+    } finally {
+      setSubmittingNested(false);
     }
   };
 
   const handleReplyTo = (replyId: string, authorNickname: string, quotePrefix?: string) => {
-    setReplyingTo(replyId);
-    setReplyingToNickname(authorNickname);
-    if (quotePrefix) {
-      setContent((prev) => (prev.trim() ? prev : `${quotePrefix} `));
-    }
-    textareaRef.current?.focus();
+    setNestedParentId(replyId);
+    setNestedReplyToNickname(authorNickname);
+    setNestedContent((prev) => (quotePrefix && !prev.trim() ? `${quotePrefix} ` : prev));
   };
 
   const handleHideReply = async (replyId: string) => {
@@ -110,41 +130,73 @@ export default function PostRepliesClient({
       ) : (
         <div className="space-y-3">
           {replies.map((reply) => (
-            <ReplyItem
-              key={reply.id}
-              reply={reply}
-              postAuthorId={postAuthorId}
-              onReply={user ? handleReplyTo : undefined}
-              canModerate={canModerate}
-              onHide={handleHideReply}
-            />
+            <div key={reply.id}>
+              <ReplyItem
+                reply={reply}
+                postAuthorId={postAuthorId}
+                onReply={user ? handleReplyTo : undefined}
+                canModerate={canModerate}
+                onHide={handleHideReply}
+              />
+              {user && nestedParentId === reply.id && (
+                <form onSubmit={handleSubmitNested} className="ml-8 mt-2 bg-white rounded-lg border border-gray-200 p-3">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                    回复 {nestedReplyToNickname}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNestedParentId(null);
+                        setNestedReplyToNickname('');
+                        setNestedContent('');
+                      }}
+                      className="ml-2 text-xs text-gray-400 hover:text-gray-600"
+                    >
+                      取消
+                    </button>
+                  </h3>
+                  <textarea
+                    name="nested-reply-content"
+                    value={nestedContent}
+                    onChange={(e) => setNestedContent(e.target.value)}
+                    placeholder="请输入回复内容…"
+                    rows={3}
+                    autoFocus
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  />
+                  <div className="mt-2">
+                    <ImageUpload
+                      onUpload={(fileUrl) => {
+                        setNestedContent((prev) => appendMarkdownImage(prev, fileUrl));
+                      }}
+                    />
+                  </div>
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={submittingNested || !nestedContent.trim()}
+                      className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    >
+                      {submittingNested ? '提交中…' : '提交楼中楼回复'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
           ))}
         </div>
       )}
 
-      {/* Reply input */}
+      {/* Top-level reply input */}
       {user ? (
-        <form onSubmit={handleSubmit} className="mt-6 bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">
-            {replyingTo ? `回复 ${replyingToNickname}` : '发表回复'}
-            {replyingTo && (
-              <button
-                type="button"
-                onClick={() => { setReplyingTo(null); setReplyingToNickname(''); }}
-                className="ml-2 text-xs text-gray-400 hover:text-gray-600"
-              >
-                取消
-              </button>
-            )}
-          </h3>
+        <form onSubmit={handleSubmitTopLevel} className="mt-6 bg-white rounded-lg border border-gray-200 p-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">发表回复</h3>
           {error && (
             <p className="text-red-500 text-sm mb-2">{error}</p>
           )}
           <textarea
-            ref={textareaRef}
             name="reply-content"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
+            value={topLevelContent}
+            onChange={(e) => setTopLevelContent(e.target.value)}
             placeholder="请输入回复内容…"
             rows={4}
             className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
@@ -152,17 +204,17 @@ export default function PostRepliesClient({
           <div className="mt-2">
             <ImageUpload
               onUpload={(fileUrl) => {
-                setContent((prev) => appendMarkdownImage(prev, fileUrl));
+                setTopLevelContent((prev) => appendMarkdownImage(prev, fileUrl));
               }}
             />
           </div>
           <div className="mt-2 flex justify-end">
             <button
               type="submit"
-              disabled={submitting || !content.trim()}
+              disabled={submittingTopLevel || !topLevelContent.trim()}
               className="px-5 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
-              {submitting ? '提交中…' : '提交回复'}
+              {submittingTopLevel ? '提交中…' : '提交回复'}
             </button>
           </div>
         </form>
