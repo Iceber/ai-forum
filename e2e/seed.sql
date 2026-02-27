@@ -7,7 +7,7 @@ INSERT INTO users (id, email, password_hash, nickname)
 VALUES (
   '00000000-0000-4000-a000-000000000010',
   'e2e-seed@example.com',
-  '$2b$10$CwTycUXWue0Thq9StjUM0uJ8x6/0D9QmX8JY9Vn0kGugHgd6Nq35a',
+  '$2b$10$6Vxm7ClYzEzWzf91O/8Hp.PPyEg6N5LuuudO.8RKi18Wa7XDVVqFO',
   'seed-user'
 ) ON CONFLICT (email) DO NOTHING;
 
@@ -16,7 +16,7 @@ INSERT INTO users (id, email, password_hash, nickname, role)
 VALUES (
   '00000000-0000-4000-a000-000000000030',
   'admin-e2e@example.com',
-  '$2b$10$CwTycUXWue0Thq9StjUM0uJ8x6/0D9QmX8JY9Vn0kGugHgd6Nq35a',
+  '$2b$10$6Vxm7ClYzEzWzf91O/8Hp.PPyEg6N5LuuudO.8RKi18Wa7XDVVqFO',
   'admin-seed-user',
   'admin'
 ) ON CONFLICT (email) DO NOTHING;
@@ -37,7 +37,7 @@ INSERT INTO users (id, email, password_hash, nickname)
 VALUES (
   '00000000-0000-4000-a000-000000000020',
   'frontend-seed@example.com',
-  '$2b$10$CwTycUXWue0Thq9StjUM0uJ8x6/0D9QmX8JY9Vn0kGugHgd6Nq35a',
+  '$2b$10$6Vxm7ClYzEzWzf91O/8Hp.PPyEg6N5LuuudO.8RKi18Wa7XDVVqFO',
   'frontend-seed-user'
 ) ON CONFLICT (email) DO NOTHING;
 
