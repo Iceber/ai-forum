@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import type { Reply } from '@/types';
 import ReplyItem from '@/components/reply/ReplyItem';
 import useAuthStore from '@/lib/auth';
@@ -24,6 +24,7 @@ export default function PostRepliesClient({
   const [replyingToNickname, setReplyingToNickname] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,9 +52,7 @@ export default function PostRepliesClient({
   const handleReplyTo = (replyId: string, authorNickname: string) => {
     setReplyingTo(replyId);
     setReplyingToNickname(authorNickname);
-    // Focus the textarea
-    const textarea = document.querySelector('textarea[name="reply-content"]') as HTMLTextAreaElement | null;
-    textarea?.focus();
+    textareaRef.current?.focus();
   };
 
   return (
@@ -98,6 +97,7 @@ export default function PostRepliesClient({
             <p className="text-red-500 text-sm mb-2">{error}</p>
           )}
           <textarea
+            ref={textareaRef}
             name="reply-content"
             value={content}
             onChange={(e) => setContent(e.target.value)}

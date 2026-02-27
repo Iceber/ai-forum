@@ -46,10 +46,8 @@ export default function BarMembersPage() {
         setMembers(items);
       }
       setMeta(newMeta);
-    } catch (err) {
-      if (err instanceof Error && err.message.includes('permission')) {
-        setForbidden(true);
-      }
+    } catch {
+      setForbidden(true);
     } finally {
       setLoading(false);
       setLoadingMore(false);
