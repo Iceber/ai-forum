@@ -492,3 +492,38 @@ VALUES ('测试待审核吧', '这是一个等待管理员审核的吧', '<USER_
 13. （管理员）进入「管理后台」审核待审核的吧
 14. （管理员）在吧管理中对吧执行封禁/解封操作
 15. （管理员）查看操作日志确认审计记录
+
+### 7.5 第三阶段重点操作流程补充
+
+#### 7.5.1 帖子互动（点赞 / 收藏 / 分享）
+
+1. 进入帖子详情页 `/posts/:id`
+2. 点击「点赞」→ 调用 `POST /api/posts/:id/like`（再次点击可取消）
+3. 点击「收藏」→ 调用 `POST /api/posts/:id/favorite`（可在个人中心取消）
+4. 点击「分享」→ 调用 `POST /api/posts/:id/share`，后端累计分享计数
+
+#### 7.5.2 楼中楼回复（内联回复框）
+
+1. 在主楼回复下点击「回复」
+2. 当前楼层下方就地展开内联回复框（不跳转到底部）
+3. 输入内容并提交 → 调用 `POST /api/posts/:postId/replies`，携带 `parentReplyId`
+4. 子回复默认展示预览，超过预览数量后可继续加载更多子回复
+
+#### 7.5.3 吧务治理（吧主 / 版主）
+
+1. 吧主/版主进入吧页面管理入口
+2. 编辑吧资料 → `PATCH /api/bars/:id`（版主不可修改分类）
+3. 查看成员列表 → `GET /api/bars/:id/members`
+4. 吧主管理角色/转让吧主：
+   - `PATCH /api/bars/:id/members/:userId/role`
+   - `POST /api/bars/:id/transfer`
+5. 吧务隐藏内容：
+   - 帖子：`POST /api/posts/:id/hide`、`POST /api/posts/:id/unhide`
+   - 回复：`POST /api/replies/:id/hide`、`POST /api/replies/:id/unhide`
+
+#### 7.5.4 媒体上传（帖子/回复）
+
+1. 在发帖页或回复编辑区点击「上传图片」
+2. 前端调用 `POST /api/uploads/presign` 获取预签名上传信息
+3. 客户端直传对象存储（S3/MinIO）
+4. 将返回的媒体 URL 插入正文（Markdown 或纯文本）
