@@ -2,9 +2,7 @@ import axios from 'axios';
 import type { ApiResponse } from '@/types';
 import { getBrowserApiBase } from '@/lib/browser-api-base';
 
-const BASE_URL = getBrowserApiBase();
-
-const apiClient = axios.create({ baseURL: BASE_URL });
+const apiClient = axios.create();
 
 apiClient.interceptors.request.use((config) => {
   config.baseURL = getBrowserApiBase();
