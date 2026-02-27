@@ -1,5 +1,6 @@
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const API_PORT = process.env.NEXT_PUBLIC_API_PORT ?? '3001';
+let cachedBrowserApiBase: string | null = null;
 
 function trimTrailingSlash(url: string): string {
   return url.endsWith('/') ? url.slice(0, -1) : url;
@@ -12,6 +13,10 @@ function trimTrailingSlash(url: string): string {
  * - Browser fallback: if NEXT_PUBLIC_API_URL is not set, use current frontend protocol+host with NEXT_PUBLIC_API_PORT (default 3001); if parsing fails, return configured raw value.
  */
 export function getBrowserApiBase(): string {
+  if (typeof window !== 'undefined' && cachedBrowserApiBase !== null) {
+    return cachedBrowserApiBase;
+  }
+
   const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
 
   if (typeof window === 'undefined') {
@@ -19,7 +24,8 @@ export function getBrowserApiBase(): string {
   }
 
   if (!configured) {
-    return `${window.location.protocol}//${window.location.hostname}:${API_PORT}`;
+    cachedBrowserApiBase = `${window.location.protocol}//${window.location.hostname}:${API_PORT}`;
+    return cachedBrowserApiBase;
   }
 
   try {
@@ -30,8 +36,10 @@ export function getBrowserApiBase(): string {
     ) {
       parsed.hostname = window.location.hostname;
     }
-    return trimTrailingSlash(parsed.toString());
+    cachedBrowserApiBase = trimTrailingSlash(parsed.toString());
+    return cachedBrowserApiBase;
   } catch {
-    return trimTrailingSlash(configured);
+    cachedBrowserApiBase = trimTrailingSlash(configured);
+    return cachedBrowserApiBase;
   }
 }
