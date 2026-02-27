@@ -159,7 +159,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
     "category": "新分类"
   }
   ```
-- **校验**：字段长度等与创建时一致
+- **校验**：字段长度等与创建时一致；版主提交 `category` 字段时返回 403（仅吧主可修改分类）
 - **成功响应** (200)：更新后的吧对象
 - **错误**：403（权限不足或吧状态不可管理），404（吧不存在）
 
@@ -192,6 +192,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
   { "targetUserId": "uuid" }
   ```
 - **校验**：目标用户必须是该吧成员且角色非 `owner`
+- **说明**：转让成功后，目标成员角色变为 `owner`，原吧主角色降为 `moderator`
 - **成功响应** (200)：返回新吧主信息
 - **错误**：403（权限不足或吧状态不可管理），404（目标用户非成员），409（目标已是吧主）
 
@@ -278,6 +279,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 #### `DELETE /api/posts/:id/favorite` — 取消收藏
 - **认证**：是
 - **成功响应** (200)
+- **错误**：404（未收藏）
 
 #### `POST /api/posts/:id/share` — 记录分享
 - **认证**：是
@@ -307,6 +309,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 - **成功响应** (204)
 - **说明**：
   - 软删除（设置 `deleted_at` 与 `status = 'deleted'`）。
+  - 若为主楼回复，帖子 `reply_count` 需减 1（在事务内完成）。
   - 若为父回复，其子回复一并软删除（级联，设置 `deleted_at` 与 `status = 'deleted'`）；该父回复删除后不再参与前台子回复计数展示，因此不逐条维护 `child_count`。
   - 若为子回复，需同时将父回复的 `child_count` 减 1（在事务内完成）。
   - 删除操作不记录到管理员审计日志。
@@ -337,8 +340,8 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 #### `GET /api/users/me/favorites` — 我的收藏列表
 - **认证**：是
 - **查询参数**：`cursor`、`limit`
-- **响应**：帖子列表（包含帖子标题、吧名、作者昵称、收藏时间），支持分页。若原帖已被删除（`deleted_at` 不为空），则帖子信息返回占位内容（如标题“帖子已删除”），仍保留收藏记录以便用户管理。
-- **说明**：查询时左连接 `posts` 表，即使帖子被删除也返回记录，但填充默认值。建议统一为：
+- **响应**：帖子列表（包含帖子标题、吧名、作者昵称、收藏时间），支持分页。若原帖已被删除（`deleted_at` 不为空）或已隐藏（`status = 'hidden'`），则帖子信息返回占位内容（如标题“帖子已删除”），仍保留收藏记录以便用户管理。
+- **说明**：查询时左连接 `posts` 表，即使帖子被删除或隐藏也返回记录，但填充默认值。建议统一为：
   - `title = "帖子已删除"`
   - `barName = null`、`authorNickname = null`
   - `postId` 保留原收藏目标 ID，`favoritedAt` 保留真实收藏时间
@@ -346,6 +349,8 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 > **注**：个人资料编辑接口（`PATCH /api/users/me/profile`）维持第二阶段实现，仅支持修改昵称和签名，本阶段不扩展头像编辑功能。
 
 ### 5.8 帖子/回复列表响应扩展
+
+`GET /api/posts/:postId/replies` 仅返回主楼回复（`parent_reply_id IS NULL`）。
 
 **帖子详情响应**（`GET /api/posts/:id`）新增：
 ```json
