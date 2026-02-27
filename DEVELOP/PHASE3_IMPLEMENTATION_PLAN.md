@@ -148,7 +148,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 ### 5.2 吧管理扩展
 
 #### `PATCH /api/bars/:id` — 编辑吧资料
-- **认证**：需要（Bearer Token）
+- **认证**：是
 - **权限**：吧主或版主（角色检查）
 - **请求体**（可部分更新）：
   ```json
@@ -164,13 +164,13 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 - **错误**：403（权限不足或吧状态不可管理），404（吧不存在）
 
 #### `GET /api/bars/:id/members` — 获取吧成员列表
-- **认证**：需要（Bearer Token）
+- **认证**：是
 - **权限**：吧主或版主（普通成员不可获取完整成员列表）
 - **查询参数**：`cursor`（可选）、`limit`（默认 20，最大 100）、`role`（可选，`member` | `moderator` | `owner`；非法值返回 400）
 - **响应**：成员列表，包含用户基本信息、角色、加入时间
 
 #### `PATCH /api/bars/:id/members/:userId/role` — 修改成员角色
-- **认证**：需要（Bearer Token）
+- **认证**：是
 - **权限**：仅吧主可操作
 - **请求体**：
   ```json
@@ -185,7 +185,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 - **错误**：403（非吧主或吧状态不可管理），404（成员不存在），409（角色变更非法，如转让吧主需用专门接口）
 
 #### `POST /api/bars/:id/transfer` — 转让吧主
-- **认证**：需要（Bearer Token）
+- **认证**：是
 - **权限**：仅当前吧主
 - **请求体**：
   ```json
@@ -196,7 +196,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 - **错误**：403（权限不足或吧状态不可管理），404（目标用户非成员），409（目标已是吧主）
 
 #### `POST /api/posts/:id/hide` — 隐藏帖子
-- **认证**：需要（Bearer Token）
+- **认证**：是
 - **权限**：吧主或版主
 - **请求体**（可选）：
   ```json
@@ -210,7 +210,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 - 类似隐藏帖子，作用于回复。
 
 #### `POST /api/posts/:id/unhide` — 取消隐藏帖子
-- **认证**：需要（Bearer Token）
+- **认证**：是
 - **权限**：吧主或版主
 - **说明**：设置帖子 `status = 'published'`
 - **成功响应** (200)：取消隐藏后的帖子对象
@@ -237,7 +237,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
   - 帖子总回复数 `reply_count` 仅对主楼回复递增，楼中楼回复不改变帖子回复计数。
 
 #### `GET /api/replies/:replyId/children` — 获取楼中楼子回复列表
-- **认证**：无需
+- **认证**：否
 - **路径参数**：`replyId` — 父回复 ID
 - **查询参数**：`cursor`（基于 `created_at`）、`limit`（默认 10，最大 50）
 - **响应**：子回复列表（按创建时间升序），每条包含：
@@ -259,28 +259,28 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 ### 5.4 互动接口
 
 #### `POST /api/posts/:id/like` — 点赞帖子
-- **认证**：需要
+- **认证**：是
 - **成功响应** (201)：返回当前点赞状态及更新后的 `likeCount`
 - **幂等性**：已点赞则返回 409（错误码 `ALREADY_LIKED`），前端应处理为已点赞状态
 
 #### `DELETE /api/posts/:id/like` — 取消点赞帖子
-- **认证**：需要
+- **认证**：是
 - **成功响应** (200)：返回当前点赞状态及更新后的 `likeCount`
 - **错误**：404（未点赞）
 
 #### 类似接口针对回复：`POST /api/replies/:id/like`、`DELETE /api/replies/:id/like`
 
 #### `POST /api/posts/:id/favorite` — 收藏帖子
-- **认证**：需要
+- **认证**：是
 - **成功响应** (201)：返回当前收藏状态及更新后的 `favoriteCount`
 - **幂等性**：已收藏返回 409 `ALREADY_FAVORITED`
 
 #### `DELETE /api/posts/:id/favorite` — 取消收藏
-- **认证**：需要
+- **认证**：是
 - **成功响应** (200)
 
 #### `POST /api/posts/:id/share` — 记录分享
-- **认证**：需要
+- **认证**：是
 - **成功响应** (200)：
   ```json
   {
@@ -293,7 +293,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 ### 5.5 帖子与回复删除
 
 #### `DELETE /api/posts/:id` — 删除帖子
-- **认证**：需要（Bearer Token）
+- **认证**：是
 - **权限**：作者本人、吧主、版主
 - **前置检查**：所属吧状态必须为 `active` 或 `suspended`，否则返回 403 `BAR_NOT_MANAGEABLE`
 - **成功响应** (204)
@@ -301,7 +301,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
   - `child_count` 仅用于未删除主楼回复的子回复展示；父级主楼回复被删除时该计数不再用于前台展示，因此级联删除场景不做逐条回写，字段值可保持原值。
 
 #### `DELETE /api/replies/:id` — 删除回复
-- **认证**：需要（Bearer Token）
+- **认证**：是
 - **权限**：作者本人、吧主、版主
 - **前置检查**：所属吧状态必须为 `active` 或 `suspended`，否则返回 403
 - **成功响应** (204)
@@ -314,7 +314,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 ### 5.6 媒体上传
 
 #### `POST /api/uploads/presign` — 获取预签名上传 URL
-- **认证**：需要
+- **认证**：是
 - **请求体**：
   ```json
   {
@@ -335,7 +335,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 ### 5.7 个人中心扩展
 
 #### `GET /api/users/me/favorites` — 我的收藏列表
-- **认证**：需要
+- **认证**：是
 - **查询参数**：`cursor`、`limit`
 - **响应**：帖子列表（包含帖子标题、吧名、作者昵称、收藏时间），支持分页。若原帖已被删除（`deleted_at` 不为空），则帖子信息返回占位内容（如标题“帖子已删除”），仍保留收藏记录以便用户管理。
 - **说明**：查询时左连接 `posts` 表，即使帖子被删除也返回记录，但填充默认值。建议统一为：
