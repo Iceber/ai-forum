@@ -5,8 +5,6 @@ import AdminNav from '@/components/admin/AdminNav';
 import type { Bar, PageMeta, ApiResponse } from '@/types';
 import { getBrowserApiBase } from '@/lib/browser-api-base';
 
-const API_BASE = getBrowserApiBase();
-
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN', {
     year: 'numeric',
@@ -18,6 +16,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function PendingBarsPage() {
+  const apiBase = getBrowserApiBase();
   const [bars, setBars] = useState<Bar[]>([]);
   const [meta, setMeta] = useState<PageMeta>({ hasMore: false });
   const [loading, setLoading] = useState(true);
@@ -37,10 +36,10 @@ export default function PendingBarsPage() {
     const headers = getAuthHeaders();
     const params = new URLSearchParams({ status: 'pending_review' });
     if (cursor) params.set('cursor', cursor);
-    const res = await fetch(`${API_BASE}/api/admin/bars?${params}`, { headers });
+    const res = await fetch(`${apiBase}/api/admin/bars?${params}`, { headers });
     const json: ApiResponse<Bar[]> = await res.json();
     return json;
-  }, []);
+  }, [apiBase]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -76,7 +75,7 @@ export default function PendingBarsPage() {
   const handleApprove = async (barId: string) => {
     setActionLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/admin/bars/${barId}/approve`, {
+      const res = await fetch(`${apiBase}/api/admin/bars/${barId}/approve`, {
         method: 'POST',
         headers: getAuthHeaders(),
       });
@@ -96,7 +95,7 @@ export default function PendingBarsPage() {
     if (!rejectTarget) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/admin/bars/${rejectTarget.id}/reject`, {
+      const res = await fetch(`${apiBase}/api/admin/bars/${rejectTarget.id}/reject`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ reason }),

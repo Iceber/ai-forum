@@ -6,8 +6,6 @@ import ProfileNav from '@/components/profile/ProfileNav';
 import type { MyReply, PageMeta, ApiResponse } from '@/types';
 import { getBrowserApiBase } from '@/lib/browser-api-base';
 
-const API_BASE = getBrowserApiBase();
-
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN', {
     year: 'numeric',
@@ -19,6 +17,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function MyRepliesPage() {
+  const apiBase = getBrowserApiBase();
   const [replies, setReplies] = useState<MyReply[]>([]);
   const [meta, setMeta] = useState<PageMeta>({ hasMore: false });
   const [loading, setLoading] = useState(true);
@@ -30,12 +29,12 @@ export default function MyRepliesPage() {
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const url = cursor
-      ? `${API_BASE}/api/users/me/replies?cursor=${cursor}`
-      : `${API_BASE}/api/users/me/replies`;
+      ? `${apiBase}/api/users/me/replies?cursor=${cursor}`
+      : `${apiBase}/api/users/me/replies`;
     const res = await fetch(url, { cache: 'no-store', headers });
     const json: ApiResponse<MyReply[]> = await res.json();
     return json;
-  }, []);
+  }, [apiBase]);
 
   useEffect(() => {
     let cancelled = false;

@@ -5,8 +5,6 @@ import ProfileNav from '@/components/profile/ProfileNav';
 import type { CreatedBar, PageMeta, ApiResponse } from '@/types';
 import { getBrowserApiBase } from '@/lib/browser-api-base';
 
-const API_BASE = getBrowserApiBase();
-
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN', {
     year: 'numeric',
@@ -36,6 +34,7 @@ const statusColor: Record<string, string> = {
 };
 
 export default function CreatedBarsPage() {
+  const apiBase = getBrowserApiBase();
   const [bars, setBars] = useState<CreatedBar[]>([]);
   const [meta, setMeta] = useState<PageMeta>({ hasMore: false });
   const [loading, setLoading] = useState(true);
@@ -47,12 +46,12 @@ export default function CreatedBarsPage() {
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const url = cursor
-      ? `${API_BASE}/api/users/me/created-bars?cursor=${cursor}`
-      : `${API_BASE}/api/users/me/created-bars`;
+      ? `${apiBase}/api/users/me/created-bars?cursor=${cursor}`
+      : `${apiBase}/api/users/me/created-bars`;
     const res = await fetch(url, { cache: 'no-store', headers });
     const json: ApiResponse<CreatedBar[]> = await res.json();
     return json;
-  }, []);
+  }, [apiBase]);
 
   useEffect(() => {
     let cancelled = false;

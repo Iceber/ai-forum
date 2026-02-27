@@ -5,8 +5,6 @@ import AdminNav from '@/components/admin/AdminNav';
 import type { AdminAction, PageMeta, ApiResponse } from '@/types';
 import { getBrowserApiBase } from '@/lib/browser-api-base';
 
-const API_BASE = getBrowserApiBase();
-
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN', {
     year: 'numeric',
@@ -27,6 +25,7 @@ const actionLabel: Record<string, string> = {
 };
 
 export default function AdminActionsPage() {
+  const apiBase = getBrowserApiBase();
   const [actions, setActions] = useState<AdminAction[]>([]);
   const [meta, setMeta] = useState<PageMeta>({ hasMore: false });
   const [loading, setLoading] = useState(true);
@@ -40,11 +39,11 @@ export default function AdminActionsPage() {
     const params = new URLSearchParams();
     if (cursor) params.set('cursor', cursor);
     const qs = params.toString();
-    const url = `${API_BASE}/api/admin/actions${qs ? `?${qs}` : ''}`;
+    const url = `${apiBase}/api/admin/actions${qs ? `?${qs}` : ''}`;
     const res = await fetch(url, { headers });
     const json: ApiResponse<AdminAction[]> = await res.json();
     return json;
-  }, []);
+  }, [apiBase]);
 
   useEffect(() => {
     let cancelled = false;

@@ -10,9 +10,8 @@ import JoinBarButton from '@/components/bar/JoinBarButton';
 import useAuthStore from '@/lib/auth';
 import { getBrowserApiBase } from '@/lib/browser-api-base';
 
-const API_BASE = getBrowserApiBase();
-
 export default function BarPage() {
+  const apiBase = getBrowserApiBase();
   const params = useParams<{ id: string }>();
   const { user } = useAuthStore();
   const [bar, setBar] = useState<Bar | null>(null);
@@ -32,8 +31,8 @@ export default function BarPage() {
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
         const [barRes, postsRes] = await Promise.all([
-          fetch(`${API_BASE}/api/bars/${params.id}`, { headers }),
-          fetch(`${API_BASE}/api/posts?barId=${params.id}&limit=20`),
+          fetch(`${apiBase}/api/bars/${params.id}`, { headers }),
+          fetch(`${apiBase}/api/posts?barId=${params.id}&limit=20`),
         ]);
 
         if (!cancelled) {
@@ -59,7 +58,7 @@ export default function BarPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [params.id]);
+  }, [apiBase, params.id]);
 
   const handleMembershipChange = (isMember: boolean) => {
     if (bar) {

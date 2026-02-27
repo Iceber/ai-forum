@@ -7,8 +7,6 @@ import type { Post, Reply, ApiResponse } from '@/types';
 import PostRepliesClient from './PostRepliesClient';
 import { getBrowserApiBase } from '@/lib/browser-api-base';
 
-const API_BASE = getBrowserApiBase();
-
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN', {
     year: 'numeric',
@@ -20,6 +18,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function PostPage() {
+  const apiBase = getBrowserApiBase();
   const params = useParams<{ id: string }>();
   const [post, setPost] = useState<Post | null>(null);
   const [replies, setReplies] = useState<Reply[]>([]);
@@ -33,8 +32,8 @@ export default function PostPage() {
     async function load() {
       try {
         const [postRes, repliesRes] = await Promise.all([
-          fetch(`${API_BASE}/api/posts/${params.id}`),
-          fetch(`${API_BASE}/api/posts/${params.id}/replies?limit=50`),
+          fetch(`${apiBase}/api/posts/${params.id}`),
+          fetch(`${apiBase}/api/posts/${params.id}/replies?limit=50`),
         ]);
 
         if (!cancelled) {
@@ -59,7 +58,7 @@ export default function PostPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [params.id]);
+  }, [apiBase, params.id]);
 
   if (loading) {
     return <p className="text-gray-500 text-center py-12">加载中…</p>;
