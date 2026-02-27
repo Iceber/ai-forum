@@ -4,12 +4,14 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Bar } from './bar.entity';
 import { BarMember } from './bar-member.entity';
 import { CreateBarDto } from './dto/create-bar.dto';
+import { UpdateBarDto } from './dto/update-bar.dto';
 
 @Injectable()
 export class BarsService {
@@ -306,6 +308,191 @@ export class BarsService {
 
       this.logger.log(`User left bar: userId=${userId}, barId=${barId}`);
       return { success: true };
+    });
+  }
+
+  private async checkBarManageable(barId: string): Promise<Bar> {
+    const bar = await this.barsRepository.findOne({ where: { id: barId } });
+    if (!bar) throw new NotFoundException('Bar not found');
+    if (bar.status !== 'active' && bar.status !== 'suspended') {
+      throw new ForbiddenException({
+        message: 'Bar is not manageable in its current status',
+        error: 'BAR_NOT_MANAGEABLE',
+      });
+    }
+    return bar;
+  }
+
+  async updateBar(barId: string, dto: UpdateBarDto, userId: string) {
+    const bar = await this.checkBarManageable(barId);
+
+    const membership = await this.barMembersRepository.findOne({
+      where: { barId, userId },
+    });
+    if (!membership || (membership.role !== 'owner' && membership.role !== 'moderator')) {
+      throw new ForbiddenException('No permission to edit this bar');
+    }
+
+    // Moderators cannot change category
+    if (membership.role === 'moderator' && dto.category !== undefined) {
+      throw new ForbiddenException('Moderators cannot change bar category');
+    }
+
+    if (dto.description !== undefined) bar.description = dto.description;
+    if (dto.rules !== undefined) bar.rules = dto.rules;
+    if (dto.avatarUrl !== undefined) bar.avatarUrl = dto.avatarUrl;
+    if (dto.category !== undefined) bar.category = dto.category;
+
+    const saved = await this.barsRepository.save(bar);
+    this.logger.log(`Bar updated: barId=${barId}, userId=${userId}`);
+    return saved;
+  }
+
+  async getMembers(
+    barId: string,
+    userId: string,
+    cursor?: string,
+    limit = 20,
+    role?: string,
+  ) {
+    await this.checkBarManageable(barId);
+
+    const membership = await this.barMembersRepository.findOne({
+      where: { barId, userId },
+    });
+    if (!membership || (membership.role !== 'owner' && membership.role !== 'moderator')) {
+      throw new ForbiddenException('No permission to view member list');
+    }
+
+    if (role && !['member', 'moderator', 'owner'].includes(role)) {
+      throw new BadRequestException('Invalid role filter');
+    }
+
+    const take = Math.min(limit, 100);
+    const qb = this.barMembersRepository
+      .createQueryBuilder('bm')
+      .leftJoinAndSelect('bm.user', 'user')
+      .where('bm.barId = :barId', { barId })
+      .orderBy('bm.joinedAt', 'DESC')
+      .take(take + 1);
+
+    if (role) {
+      qb.andWhere('bm.role = :role', { role });
+    }
+
+    if (cursor) {
+      try {
+        const decodedDate = new Date(
+          Buffer.from(cursor, 'base64').toString('utf8'),
+        );
+        qb.andWhere('bm.joinedAt < :ja', { ja: decodedDate });
+      } catch {
+        // invalid cursor
+      }
+    }
+
+    const members = await qb.getMany();
+    const hasMore = members.length > take;
+    const items = hasMore ? members.slice(0, take) : members;
+    const nextCursor =
+      hasMore && items.length > 0
+        ? Buffer.from(
+            items[items.length - 1].joinedAt.toISOString(),
+          ).toString('base64')
+        : null;
+
+    const data = items.map((m) => ({
+      id: m.id,
+      userId: m.userId,
+      nickname: m.user?.nickname ?? null,
+      avatarUrl: m.user?.avatarUrl ?? null,
+      role: m.role,
+      joinedAt: m.joinedAt,
+    }));
+
+    return { data, meta: { cursor: nextCursor, hasMore }, error: null };
+  }
+
+  async changeRole(
+    barId: string,
+    targetUserId: string,
+    role: 'member' | 'moderator',
+    userId: string,
+  ) {
+    await this.checkBarManageable(barId);
+
+    const callerMembership = await this.barMembersRepository.findOne({
+      where: { barId, userId },
+    });
+    if (!callerMembership || callerMembership.role !== 'owner') {
+      throw new ForbiddenException('Only bar owner can change member roles');
+    }
+
+    const targetMembership = await this.barMembersRepository.findOne({
+      where: { barId, userId: targetUserId },
+    });
+    if (!targetMembership) {
+      throw new NotFoundException('Target user is not a member of this bar');
+    }
+
+    if (targetMembership.role === 'owner') {
+      throw new ConflictException({
+        message: 'Cannot change owner role. Use transfer endpoint instead.',
+        error: 'ROLE_CHANGE_INVALID',
+      });
+    }
+
+    targetMembership.role = role;
+    const saved = await this.barMembersRepository.save(targetMembership);
+    this.logger.log(
+      `Member role changed: barId=${barId}, targetUserId=${targetUserId}, newRole=${role}, byUserId=${userId}`,
+    );
+    return saved;
+  }
+
+  async transferOwnership(barId: string, targetUserId: string, userId: string) {
+    await this.checkBarManageable(barId);
+
+    const ownerMembership = await this.barMembersRepository.findOne({
+      where: { barId, userId },
+    });
+    if (!ownerMembership || ownerMembership.role !== 'owner') {
+      throw new ForbiddenException('Only bar owner can transfer ownership');
+    }
+
+    const targetMembership = await this.barMembersRepository.findOne({
+      where: { barId, userId: targetUserId },
+      relations: ['user'],
+    });
+    if (!targetMembership) {
+      throw new NotFoundException('Target user is not a member of this bar');
+    }
+
+    if (targetMembership.role === 'owner') {
+      throw new ConflictException({
+        message: 'Target is already the owner',
+        error: 'ALREADY_OWNER',
+      });
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      // Demote current owner to moderator
+      ownerMembership.role = 'moderator';
+      await manager.save(ownerMembership);
+
+      // Promote target to owner
+      targetMembership.role = 'owner';
+      await manager.save(targetMembership);
+
+      this.logger.log(
+        `Bar ownership transferred: barId=${barId}, from=${userId}, to=${targetUserId}`,
+      );
+
+      return {
+        id: targetMembership.userId,
+        nickname: targetMembership.user?.nickname ?? null,
+        role: 'owner',
+      };
     });
   }
 
