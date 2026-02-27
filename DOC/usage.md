@@ -240,12 +240,12 @@
   └─ 页面上显示「加入吧」或「退出吧」按钮（取决于当前成员状态）
 
 步骤 2: 点击「加入吧」按钮
-  └─ 调用 POST /api/bars/:id/members（携带 Bearer Token）
+  └─ 调用 POST /api/bars/:id/join（携带 Bearer Token）
   └─ 成功后按钮变为「退出吧」
   └─ 吧成员数更新
 
 步骤 3: （可选）点击「退出吧」按钮
-  └─ 调用 DELETE /api/bars/:id/members（携带 Bearer Token）
+  └─ 调用 POST /api/bars/:id/leave（携带 Bearer Token）
   └─ 成功后按钮变为「加入吧」
   └─ 吧成员数更新
 ```
@@ -312,7 +312,7 @@
   └─ 个人简介
 
 步骤 3: 点击「保存」
-  └─ 调用 PATCH /api/users/me（携带 Bearer Token）
+  └─ 调用 PATCH /api/users/me/profile（携带 Bearer Token）
   └─ 成功后返回个人中心，显示更新后的信息
 ```
 
@@ -419,7 +419,7 @@ docker-compose up -d
 cat backend/migrations/001_initial_schema.sql | \
   docker-compose exec -T postgres psql -U aiforum -d aiforum
 
-cat backend/migrations/002_phase2_schema.sql | \
+cat backend/migrations/002_phase2_bars_admin.sql | \
   docker-compose exec -T postgres psql -U aiforum -d aiforum
 ```
 
