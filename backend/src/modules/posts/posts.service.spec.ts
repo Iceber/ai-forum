@@ -261,7 +261,7 @@ describe('PostsService', () => {
 
       const result = await service.sharePost('post-uuid-1');
 
-      expect(result.shareUrl).toBe('/posts/post-uuid-1');
+      expect(result.postId).toBe('post-uuid-1');
       expect(result.shareCount).toBe(1);
     });
 

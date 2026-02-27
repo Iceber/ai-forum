@@ -139,7 +139,7 @@ export class PostsService {
       bar: post.bar,
       authorId: post.authorId,
       author: post.author,
-      title: post.status === 'deleted' ? '帖子已删除' : post.title,
+      title: post.status === 'deleted' ? '[deleted]' : post.title,
       content: post.status === 'deleted' ? '' : post.content,
       contentType: post.contentType,
       replyCount: post.replyCount,
@@ -233,7 +233,7 @@ export class PostsService {
     const updated = await this.postsRepository.findOne({ where: { id: postId } });
 
     return {
-      shareUrl: `/posts/${postId}`,
+      postId,
       shareCount: updated!.shareCount,
     };
   }
