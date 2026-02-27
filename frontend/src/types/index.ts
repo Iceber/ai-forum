@@ -34,9 +34,17 @@ export interface Post {
   author?: User;
   title: string;
   content: string;
+  contentType?: 'plaintext' | 'markdown';
   replyCount: number;
+  likeCount?: number;
+  favoriteCount?: number;
+  shareCount?: number;
   lastReplyAt?: string;
+  status?: string;
+  isLiked?: boolean | null;
+  isFavorited?: boolean | null;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Reply {
@@ -44,9 +52,48 @@ export interface Reply {
   postId: string;
   authorId: string;
   author?: User;
-  floorNumber: number;
+  floorNumber: number | null;
   content: string;
+  contentType?: 'plaintext' | 'markdown';
+  likeCount?: number;
+  childCount?: number;
+  isLiked?: boolean | null;
+  isAuthor?: boolean;
+  parentReplyId?: string | null;
+  childPreview?: ChildReply[];
+  status?: string;
   createdAt: string;
+}
+
+export interface ChildReply {
+  id: string;
+  content: string;
+  contentType?: 'plaintext' | 'markdown';
+  author?: { id: string; nickname: string } | null;
+  createdAt: string;
+  likeCount?: number;
+  isLiked?: boolean | null;
+  isAuthor?: boolean;
+  parentReplyId?: string | null;
+  floorNumber?: number | null;
+}
+
+export interface BarMemberItem {
+  id: string;
+  userId: string;
+  nickname: string | null;
+  avatarUrl?: string | null;
+  role: string;
+  joinedAt: string;
+}
+
+export interface MyFavorite {
+  id: string;
+  postId: string;
+  title: string;
+  barName: string | null;
+  authorNickname: string | null;
+  favoritedAt: string;
 }
 
 export interface MyPost {

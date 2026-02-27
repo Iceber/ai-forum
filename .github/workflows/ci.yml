@@ -89,6 +89,7 @@ jobs:
         run: |
           PGPASSWORD=postgres psql -h localhost -U postgres -d ai_forum -f backend/migrations/001_initial_schema.sql
           PGPASSWORD=postgres psql -h localhost -U postgres -d ai_forum -f backend/migrations/002_phase2_bars_admin.sql
+          PGPASSWORD=postgres psql -h localhost -U postgres -d ai_forum -f backend/migrations/003_phase3_interactions.sql
 
       - name: Seed database for E2E tests
         run: |
@@ -156,6 +157,7 @@ jobs:
         run: |
           cat backend/migrations/001_initial_schema.sql | docker compose exec -T postgres psql -U aiforum -d aiforum
           cat backend/migrations/002_phase2_bars_admin.sql | docker compose exec -T postgres psql -U aiforum -d aiforum
+          cat backend/migrations/003_phase3_interactions.sql | docker compose exec -T postgres psql -U aiforum -d aiforum
           cat e2e/seed.sql | docker compose exec -T postgres psql -U aiforum -d aiforum
 
       - name: Wait for services

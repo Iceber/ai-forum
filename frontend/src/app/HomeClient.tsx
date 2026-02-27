@@ -160,6 +160,8 @@ export default function HomeClient({
               barName={post.bar?.name ?? '未知板块'}
               barId={post.barId}
               replyCount={post.replyCount}
+              likeCount={post.likeCount}
+              favoriteCount={post.favoriteCount}
               createdAt={post.createdAt}
             />
           ))}

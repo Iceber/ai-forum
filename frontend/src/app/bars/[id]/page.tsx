@@ -7,6 +7,7 @@ import type { Bar, Post, PageMeta, ApiResponse } from '@/types';
 import BarPostsClient from './BarPostsClient';
 import BarStatusBadge from '@/components/bar/BarStatusBadge';
 import JoinBarButton from '@/components/bar/JoinBarButton';
+import BarManageMenu from '@/components/bar/BarManageMenu';
 import useAuthStore from '@/lib/auth';
 import { getBrowserApiBase } from '@/lib/browser-api-base';
 
@@ -135,6 +136,9 @@ export default function BarPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 ml-4">
+            {user && (bar.memberRole === 'owner' || bar.memberRole === 'moderator') && (
+              <BarManageMenu barId={bar.id} memberRole={bar.memberRole!} />
+            )}
             {user && (
               <JoinBarButton
                 barId={bar.id}

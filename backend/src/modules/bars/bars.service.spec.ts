@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
@@ -277,6 +278,167 @@ describe('BarsService', () => {
       await expect(service.leave(mockBar.id!, userId)).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('updateBar', () => {
+    const userId = '00000000-0000-4000-a000-000000000010';
+
+    it('should update bar when user is owner', async () => {
+      barsRepository.findOne.mockResolvedValue({ ...mockBar, status: 'active' });
+      barMembersRepository.findOne.mockResolvedValue({ ...mockMember, userId, role: 'owner' });
+      barsRepository.save.mockResolvedValue({ ...mockBar, description: 'Updated' });
+
+      const result = await service.updateBar(mockBar.id!, { description: 'Updated' }, userId);
+
+      expect(result.description).toBe('Updated');
+      expect(barsRepository.save).toHaveBeenCalled();
+    });
+
+    it('should update bar when user is moderator', async () => {
+      barsRepository.findOne.mockResolvedValue({ ...mockBar, status: 'active' });
+      barMembersRepository.findOne.mockResolvedValue({ ...mockMember, userId, role: 'moderator' });
+      barsRepository.save.mockResolvedValue({ ...mockBar, description: 'Updated' });
+
+      const result = await service.updateBar(mockBar.id!, { description: 'Updated' }, userId);
+
+      expect(result.description).toBe('Updated');
+    });
+
+    it('should throw ForbiddenException when moderator tries to change category', async () => {
+      barsRepository.findOne.mockResolvedValue({ ...mockBar, status: 'active' });
+      barMembersRepository.findOne.mockResolvedValue({ ...mockMember, userId, role: 'moderator' });
+
+      await expect(
+        service.updateBar(mockBar.id!, { category: 'new-cat' }, userId),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw ForbiddenException when user is regular member', async () => {
+      barsRepository.findOne.mockResolvedValue({ ...mockBar, status: 'active' });
+      barMembersRepository.findOne.mockResolvedValue({ ...mockMember, userId, role: 'member' });
+
+      await expect(
+        service.updateBar(mockBar.id!, { description: 'Updated' }, userId),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw NotFoundException when bar not found', async () => {
+      barsRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.updateBar('non-existent-id', { description: 'Updated' }, userId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when bar is permanently_banned', async () => {
+      barsRepository.findOne.mockResolvedValue({ ...mockBar, status: 'permanently_banned' });
+
+      await expect(
+        service.updateBar(mockBar.id!, { description: 'Updated' }, userId),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('changeRole', () => {
+    const ownerId = '00000000-0000-4000-a000-000000000010';
+    const targetUserId = '00000000-0000-4000-a000-000000000020';
+
+    it('should change member role when caller is owner', async () => {
+      barsRepository.findOne.mockResolvedValue({ ...mockBar, status: 'active' });
+      barMembersRepository.findOne
+        .mockResolvedValueOnce({ ...mockMember, userId: ownerId, role: 'owner' })
+        .mockResolvedValueOnce({ ...mockMember, userId: targetUserId, role: 'member' });
+      barMembersRepository.save = jest.fn().mockResolvedValue({ ...mockMember, role: 'moderator' });
+
+      const result = await service.changeRole(mockBar.id!, targetUserId, 'moderator', ownerId);
+
+      expect(result.role).toBe('moderator');
+    });
+
+    it('should throw ForbiddenException when caller is not owner', async () => {
+      barsRepository.findOne.mockResolvedValue({ ...mockBar, status: 'active' });
+      barMembersRepository.findOne.mockResolvedValue({ ...mockMember, role: 'moderator' });
+
+      await expect(
+        service.changeRole(mockBar.id!, targetUserId, 'moderator', ownerId),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw NotFoundException when target is not a member', async () => {
+      barsRepository.findOne.mockResolvedValue({ ...mockBar, status: 'active' });
+      barMembersRepository.findOne
+        .mockResolvedValueOnce({ ...mockMember, userId: ownerId, role: 'owner' })
+        .mockResolvedValueOnce(null);
+
+      await expect(
+        service.changeRole(mockBar.id!, targetUserId, 'moderator', ownerId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ConflictException when target is owner', async () => {
+      barsRepository.findOne.mockResolvedValue({ ...mockBar, status: 'active' });
+      barMembersRepository.findOne
+        .mockResolvedValueOnce({ ...mockMember, userId: ownerId, role: 'owner' })
+        .mockResolvedValueOnce({ ...mockMember, userId: targetUserId, role: 'owner' });
+
+      await expect(
+        service.changeRole(mockBar.id!, targetUserId, 'moderator', ownerId),
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('transferOwnership', () => {
+    const ownerId = '00000000-0000-4000-a000-000000000010';
+    const targetUserId = '00000000-0000-4000-a000-000000000020';
+
+    it('should transfer ownership from owner to target', async () => {
+      barsRepository.findOne.mockResolvedValue({ ...mockBar, status: 'active' });
+      barMembersRepository.findOne
+        .mockResolvedValueOnce({ ...mockMember, userId: ownerId, role: 'owner' })
+        .mockResolvedValueOnce({
+          ...mockMember,
+          userId: targetUserId,
+          role: 'moderator',
+          user: { nickname: 'Target User' },
+        });
+
+      const result = await service.transferOwnership(mockBar.id!, targetUserId, ownerId);
+
+      expect(result.id).toBe(targetUserId);
+      expect(result.role).toBe('owner');
+      expect(mockManager.save).toHaveBeenCalledTimes(2);
+    });
+
+    it('should throw ForbiddenException when caller is not owner', async () => {
+      barsRepository.findOne.mockResolvedValue({ ...mockBar, status: 'active' });
+      barMembersRepository.findOne.mockResolvedValue({ ...mockMember, role: 'moderator' });
+
+      await expect(
+        service.transferOwnership(mockBar.id!, targetUserId, ownerId),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw NotFoundException when target is not a member', async () => {
+      barsRepository.findOne.mockResolvedValue({ ...mockBar, status: 'active' });
+      barMembersRepository.findOne
+        .mockResolvedValueOnce({ ...mockMember, userId: ownerId, role: 'owner' })
+        .mockResolvedValueOnce(null);
+
+      await expect(
+        service.transferOwnership(mockBar.id!, targetUserId, ownerId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ConflictException when target is already owner', async () => {
+      barsRepository.findOne.mockResolvedValue({ ...mockBar, status: 'active' });
+      barMembersRepository.findOne
+        .mockResolvedValueOnce({ ...mockMember, userId: ownerId, role: 'owner' })
+        .mockResolvedValueOnce({ ...mockMember, userId: targetUserId, role: 'owner' });
+
+      await expect(
+        service.transferOwnership(mockBar.id!, targetUserId, ownerId),
+      ).rejects.toThrow(ConflictException);
     });
   });
 });

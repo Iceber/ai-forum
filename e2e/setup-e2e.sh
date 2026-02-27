@@ -47,6 +47,8 @@ cat "$PROJECT_ROOT/backend/migrations/001_initial_schema.sql" \
   | docker compose exec -T postgres psql -U aiforum -d aiforum
 cat "$PROJECT_ROOT/backend/migrations/002_phase2_bars_admin.sql" \
   | docker compose exec -T postgres psql -U aiforum -d aiforum
+cat "$PROJECT_ROOT/backend/migrations/003_phase3_interactions.sql" \
+  | docker compose exec -T postgres psql -U aiforum -d aiforum
 
 # ─── 4. Seed E2E data ───────────────────────────────────────────────
 echo "--- Seeding E2E test data ---"
