@@ -104,17 +104,6 @@ export default function HomeClient({
 
   return (
     <div>
-      {user?.role === 'admin' && (
-        <section className="mb-6">
-          <Link
-            href="/admin"
-            className="inline-flex items-center px-4 py-2 rounded-md bg-orange-600 text-white text-sm hover:bg-orange-700 transition-colors"
-          >
-            进入管理员后台
-          </Link>
-        </section>
-      )}
-
       {/* My Bars section - shown when logged in */}
       {user && myBars.length > 0 && (
         <section className="mb-8">
