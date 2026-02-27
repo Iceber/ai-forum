@@ -6,8 +6,7 @@ import Link from 'next/link';
 import PostCard from '@/components/post/PostCard';
 import BarStatusBadge from '@/components/bar/BarStatusBadge';
 import useAuthStore from '@/lib/auth';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { getBrowserApiBase } from '@/lib/browser-api-base';
 
 interface HomeClientProps {
   initialPosts: Post[];
@@ -20,6 +19,7 @@ export default function HomeClient({
   initialMeta,
   initialBars,
 }: HomeClientProps) {
+  const apiBase = getBrowserApiBase();
   const { user } = useAuthStore();
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [meta, setMeta] = useState<PageMeta>(initialMeta);
@@ -36,7 +36,7 @@ export default function HomeClient({
     async function fetchFallback() {
       if (initialPosts.length === 0) {
         try {
-          const res = await fetch(`${API_BASE}/api/posts?limit=20`);
+          const res = await fetch(`${apiBase}/api/posts?limit=20`);
           if (res.ok) {
             const json: ApiResponse<Post[]> = await res.json();
             if (json.data && json.data.length > 0) {
@@ -48,7 +48,7 @@ export default function HomeClient({
       }
       if (initialBars.length === 0) {
         try {
-          const res = await fetch(`${API_BASE}/api/bars?limit=12`);
+          const res = await fetch(`${apiBase}/api/bars?limit=12`);
           if (res.ok) {
             const json: ApiResponse<Bar[]> = await res.json();
             if (json.data && json.data.length > 0) {
@@ -59,7 +59,7 @@ export default function HomeClient({
       }
     }
     fetchFallback();
-  }, [initialPosts.length, initialBars.length]);
+  }, [apiBase, initialPosts.length, initialBars.length]);
 
   // Fetch "My Bars" when user is logged in
   useEffect(() => {
@@ -70,7 +70,7 @@ export default function HomeClient({
     async function fetchMyBars() {
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch(`${API_BASE}/api/users/me/bars?limit=20`, {
+        const res = await fetch(`${apiBase}/api/users/me/bars?limit=20`, {
           cache: 'no-store',
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
@@ -81,14 +81,14 @@ export default function HomeClient({
       } catch { /* ignore */ }
     }
     fetchMyBars();
-  }, [user]);
+  }, [apiBase, user]);
 
   const loadMore = async () => {
     if (!meta.hasMore || loading) return;
     setLoading(true);
     try {
       const rawRes = await fetch(
-        `${API_BASE}/api/posts?cursor=${meta.cursor ?? ''}&limit=20`,
+        `${apiBase}/api/posts?cursor=${meta.cursor ?? ''}&limit=20`,
       );
       const json: ApiResponse<Post[]> = await rawRes.json();
       if (json.data) {

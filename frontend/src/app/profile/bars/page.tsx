@@ -4,8 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import ProfileNav from '@/components/profile/ProfileNav';
 import type { MyBar, PageMeta, ApiResponse } from '@/types';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { getBrowserApiBase } from '@/lib/browser-api-base';
 
 const statusLabel: Record<string, string> = {
   active: '正常',
@@ -26,6 +25,7 @@ const statusColor: Record<string, string> = {
 };
 
 export default function MyBarsPage() {
+  const apiBase = getBrowserApiBase();
   const [bars, setBars] = useState<MyBar[]>([]);
   const [meta, setMeta] = useState<PageMeta>({ hasMore: false });
   const [loading, setLoading] = useState(true);
@@ -37,12 +37,12 @@ export default function MyBarsPage() {
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const url = cursor
-      ? `${API_BASE}/api/users/me/bars?cursor=${cursor}`
-      : `${API_BASE}/api/users/me/bars`;
+      ? `${apiBase}/api/users/me/bars?cursor=${cursor}`
+      : `${apiBase}/api/users/me/bars`;
     const res = await fetch(url, { cache: 'no-store', headers });
     const json: ApiResponse<MyBar[]> = await res.json();
     return json;
-  }, []);
+  }, [apiBase]);
 
   useEffect(() => {
     let cancelled = false;

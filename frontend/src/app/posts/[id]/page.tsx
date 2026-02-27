@@ -5,8 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { Post, Reply, ApiResponse } from '@/types';
 import PostRepliesClient from './PostRepliesClient';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { getBrowserApiBase } from '@/lib/browser-api-base';
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN', {
@@ -19,6 +18,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function PostPage() {
+  const apiBase = getBrowserApiBase();
   const params = useParams<{ id: string }>();
   const [post, setPost] = useState<Post | null>(null);
   const [replies, setReplies] = useState<Reply[]>([]);
@@ -32,8 +32,8 @@ export default function PostPage() {
     async function load() {
       try {
         const [postRes, repliesRes] = await Promise.all([
-          fetch(`${API_BASE}/api/posts/${params.id}`),
-          fetch(`${API_BASE}/api/posts/${params.id}/replies?limit=50`),
+          fetch(`${apiBase}/api/posts/${params.id}`),
+          fetch(`${apiBase}/api/posts/${params.id}/replies?limit=50`),
         ]);
 
         if (!cancelled) {
@@ -58,7 +58,7 @@ export default function PostPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [params.id]);
+  }, [apiBase, params.id]);
 
   if (loading) {
     return <p className="text-gray-500 text-center py-12">加载中…</p>;

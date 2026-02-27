@@ -4,8 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import ProfileNav from '@/components/profile/ProfileNav';
 import type { MyPost, PageMeta, ApiResponse } from '@/types';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { getBrowserApiBase } from '@/lib/browser-api-base';
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN', {
@@ -18,6 +17,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function MyPostsPage() {
+  const apiBase = getBrowserApiBase();
   const [posts, setPosts] = useState<MyPost[]>([]);
   const [meta, setMeta] = useState<PageMeta>({ hasMore: false });
   const [loading, setLoading] = useState(true);
@@ -29,12 +29,12 @@ export default function MyPostsPage() {
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const url = cursor
-      ? `${API_BASE}/api/users/me/posts?cursor=${cursor}`
-      : `${API_BASE}/api/users/me/posts`;
+      ? `${apiBase}/api/users/me/posts?cursor=${cursor}`
+      : `${apiBase}/api/users/me/posts`;
     const res = await fetch(url, { cache: 'no-store', headers });
     const json: ApiResponse<MyPost[]> = await res.json();
     return json;
-  }, []);
+  }, [apiBase]);
 
   useEffect(() => {
     let cancelled = false;

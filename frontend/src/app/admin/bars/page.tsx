@@ -3,8 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import AdminNav from '@/components/admin/AdminNav';
 import type { Bar, PageMeta, ApiResponse } from '@/types';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { getBrowserApiBase } from '@/lib/browser-api-base';
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN', {
@@ -51,6 +50,7 @@ interface ModalState {
 }
 
 export default function AdminBarsPage() {
+  const apiBase = getBrowserApiBase();
   const [bars, setBars] = useState<Bar[]>([]);
   const [meta, setMeta] = useState<PageMeta>({ hasMore: false });
   const [loading, setLoading] = useState(true);
@@ -74,11 +74,11 @@ export default function AdminBarsPage() {
     if (status) params.set('status', status);
     if (cursor) params.set('cursor', cursor);
     const qs = params.toString();
-    const url = `${API_BASE}/api/admin/bars${qs ? `?${qs}` : ''}`;
+    const url = `${apiBase}/api/admin/bars${qs ? `?${qs}` : ''}`;
     const res = await fetch(url, { headers });
     const json: ApiResponse<Bar[]> = await res.json();
     return json;
-  }, []);
+  }, [apiBase]);
 
   const loadData = useCallback(async (status: string) => {
     setLoading(true);
@@ -114,7 +114,7 @@ export default function AdminBarsPage() {
   const executeAction = async (barId: string, endpoint: string, body: Record<string, unknown>) => {
     setActionLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/admin/bars/${barId}/${endpoint}`, {
+      const res = await fetch(`${apiBase}/api/admin/bars/${barId}/${endpoint}`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(body),

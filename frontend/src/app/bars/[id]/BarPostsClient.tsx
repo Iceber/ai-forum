@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { Post, PageMeta, ApiResponse } from '@/types';
 import PostCard from '@/components/post/PostCard';
+import { getBrowserApiBase } from '@/lib/browser-api-base';
 
 interface BarPostsClientProps {
   initialPosts: Post[];
@@ -23,7 +24,7 @@ export default function BarPostsClient({
     if (!meta.hasMore || loading) return;
     setLoading(true);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+      const base = getBrowserApiBase();
       const url = `${base}/api/posts?barId=${barId}&cursor=${meta.cursor ?? ''}&limit=20`;
       const res = await fetch(url);
       const json: ApiResponse<Post[]> = await res.json();
