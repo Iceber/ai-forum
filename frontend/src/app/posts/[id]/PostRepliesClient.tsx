@@ -8,16 +8,19 @@ import apiClient from '@/lib/api-client';
 
 interface PostRepliesClientProps {
   postId: string;
+  postAuthorId?: string;
   initialReplies: Reply[];
 }
 
 export default function PostRepliesClient({
   postId,
+  postAuthorId,
   initialReplies,
 }: PostRepliesClientProps) {
   const { user } = useAuthStore();
   const [replies, setReplies] = useState<Reply[]>(initialReplies);
   const [content, setContent] = useState('');
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -27,11 +30,15 @@ export default function PostRepliesClient({
     setSubmitting(true);
     setError('');
     try {
-      const res = await apiClient.post<Reply>(`/api/posts/${postId}/replies`, {
-        content: content.trim(),
-      });
-      setReplies((prev) => [...prev, res.data]);
+      const body: Record<string, string> = { content: content.trim() };
+      if (replyingTo) body.parentReplyId = replyingTo;
+
+      const res = await apiClient.post<Reply>(`/api/posts/${postId}/replies`, body);
+      if (!replyingTo) {
+        setReplies((prev) => [...prev, res.data]);
+      }
       setContent('');
+      setReplyingTo(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : '提交失败');
     } finally {
@@ -54,10 +61,8 @@ export default function PostRepliesClient({
           {replies.map((reply) => (
             <ReplyItem
               key={reply.id}
-              floorNumber={reply.floorNumber}
-              content={reply.content}
-              authorNickname={reply.author?.nickname ?? '匿名'}
-              createdAt={reply.createdAt}
+              reply={reply}
+              postAuthorId={postAuthorId}
             />
           ))}
         </div>
@@ -66,7 +71,18 @@ export default function PostRepliesClient({
       {/* Reply input */}
       {user ? (
         <form onSubmit={handleSubmit} className="mt-6 bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">发表回复</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">
+            {replyingTo ? '回复楼中楼' : '发表回复'}
+            {replyingTo && (
+              <button
+                type="button"
+                onClick={() => setReplyingTo(null)}
+                className="ml-2 text-xs text-gray-400 hover:text-gray-600"
+              >
+                取消引用
+              </button>
+            )}
+          </h3>
           {error && (
             <p className="text-red-500 text-sm mb-2">{error}</p>
           )}

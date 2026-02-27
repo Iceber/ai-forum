@@ -5,7 +5,12 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { Post, Reply, ApiResponse } from '@/types';
 import PostRepliesClient from './PostRepliesClient';
+import LikeButton from '@/components/interaction/LikeButton';
+import FavoriteButton from '@/components/interaction/FavoriteButton';
+import ShareButton from '@/components/interaction/ShareButton';
 import { getBrowserApiBase } from '@/lib/browser-api-base';
+import useAuthStore from '@/lib/auth';
+import apiClient from '@/lib/api-client';
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN', {
@@ -20,6 +25,7 @@ function formatDate(dateStr: string) {
 export default function PostPage() {
   const apiBase = getBrowserApiBase();
   const params = useParams<{ id: string }>();
+  const { user } = useAuthStore();
   const [post, setPost] = useState<Post | null>(null);
   const [replies, setReplies] = useState<Reply[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,9 +37,14 @@ export default function PostPage() {
 
     async function load() {
       try {
+        // Use api-client for authenticated request (sends JWT token)
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
         const [postRes, repliesRes] = await Promise.all([
-          fetch(`${apiBase}/api/posts/${params.id}`),
-          fetch(`${apiBase}/api/posts/${params.id}/replies?limit=50`),
+          fetch(`${apiBase}/api/posts/${params.id}`, { headers }),
+          fetch(`${apiBase}/api/posts/${params.id}/replies?limit=50`, { headers }),
         ]);
 
         if (!cancelled) {
@@ -60,6 +71,16 @@ export default function PostPage() {
     return () => { cancelled = true; };
   }, [apiBase, params.id]);
 
+  const handleDelete = async () => {
+    if (!confirm('确定要删除这篇帖子吗？此操作不可恢复。')) return;
+    try {
+      await apiClient.delete(`/api/posts/${params.id}`);
+      window.location.href = '/';
+    } catch {
+      alert('删除失败');
+    }
+  };
+
   if (loading) {
     return <p className="text-gray-500 text-center py-12">加载中…</p>;
   }
@@ -72,6 +93,8 @@ export default function PostPage() {
       </div>
     );
   }
+
+  const canDelete = user && (user.id === post.authorId || user.role === 'admin');
 
   return (
     <div>
@@ -98,10 +121,39 @@ export default function PostPage() {
         <div className="prose prose-sm max-w-none text-gray-800 whitespace-pre-wrap border-t pt-4">
           {post.content}
         </div>
+
+        {/* Interaction buttons */}
+        <div className="mt-4 pt-4 border-t flex items-center gap-3">
+          <LikeButton
+            targetType="post"
+            targetId={post.id}
+            initialLiked={post.isLiked ?? null}
+            initialCount={post.likeCount ?? 0}
+          />
+          <FavoriteButton
+            postId={post.id}
+            initialFavorited={post.isFavorited ?? null}
+            initialCount={post.favoriteCount ?? 0}
+          />
+          <ShareButton postId={post.id} initialCount={post.shareCount ?? 0} />
+
+          {canDelete && (
+            <button
+              onClick={handleDelete}
+              className="ml-auto text-sm text-red-500 hover:text-red-700"
+            >
+              🗑️ 删除
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Replies section */}
-      <PostRepliesClient postId={post.id} initialReplies={replies} />
+      <PostRepliesClient
+        postId={post.id}
+        postAuthorId={post.authorId}
+        initialReplies={replies}
+      />
     </div>
   );
 }

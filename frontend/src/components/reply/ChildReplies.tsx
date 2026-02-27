@@ -32,7 +32,7 @@ export default function ChildReplies({
 
       const res = await api.get(`/replies/${parentReplyId}/children`, { params });
       const newChildren: ChildReply[] = res.data?.data ?? res.data ?? [];
-      const meta = res.data?.meta ?? res.meta;
+      const meta = res.data?.meta;
 
       setChildren((prev) => {
         if (!expanded) return newChildren;

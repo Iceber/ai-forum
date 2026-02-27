@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 const tabs = [
   { href: '/profile', label: '我的帖子' },
   { href: '/profile/replies', label: '我的回复' },
+  { href: '/profile/favorites', label: '我的收藏' },
   { href: '/profile/bars', label: '我的吧' },
   { href: '/profile/created-bars', label: '我创建的吧' },
 ];

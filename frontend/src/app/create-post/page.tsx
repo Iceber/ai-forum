@@ -15,6 +15,7 @@ function CreatePostForm() {
   const [barId, setBarId] = useState(searchParams.get('barId') ?? '');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [contentType, setContentType] = useState<'plaintext' | 'markdown'>('plaintext');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [barsLoading, setBarsLoading] = useState(true);
@@ -53,6 +54,7 @@ function CreatePostForm() {
         barId,
         title,
         content,
+        contentType,
       });
       router.push(`/posts/${res.data.id}`);
     } catch (err) {
@@ -115,6 +117,16 @@ function CreatePostForm() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               内容
             </label>
+            <div className="flex items-center gap-2 mb-2">
+              <label className="text-sm text-gray-600">格式：</label>
+              <button
+                type="button"
+                onClick={() => setContentType(contentType === 'plaintext' ? 'markdown' : 'plaintext')}
+                className={`text-xs px-2 py-1 rounded ${contentType === 'markdown' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'}`}
+              >
+                {contentType === 'markdown' ? 'Markdown' : '纯文本'}
+              </button>
+            </div>
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
