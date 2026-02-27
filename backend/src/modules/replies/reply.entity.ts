@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  OneToMany,
   JoinColumn,
 } from 'typeorm';
 import { Post } from '../posts/post.entity';
@@ -24,14 +25,20 @@ export class Reply {
   @Column({ name: 'parent_reply_id', nullable: true })
   parentReplyId: string | null;
 
-  @Column({ name: 'floor_number', type: 'int' })
-  floorNumber: number;
+  @Column({ name: 'floor_number', type: 'int', nullable: true })
+  floorNumber: number | null;
 
   @Column({ type: 'text' })
   content: string;
 
   @Column({ name: 'content_type', length: 20, default: 'plaintext' })
   contentType: 'plaintext' | 'markdown';
+
+  @Column({ name: 'like_count', default: 0 })
+  likeCount: number;
+
+  @Column({ name: 'child_count', default: 0 })
+  childCount: number;
 
   @Column({ length: 20, default: 'published' })
   status: 'published' | 'hidden' | 'deleted' | 'under_review';
@@ -56,4 +63,7 @@ export class Reply {
   @ManyToOne(() => Reply, { nullable: true })
   @JoinColumn({ name: 'parent_reply_id' })
   parentReply: Reply | null;
+
+  @OneToMany(() => Reply, (reply) => reply.parentReply)
+  children: Reply[];
 }

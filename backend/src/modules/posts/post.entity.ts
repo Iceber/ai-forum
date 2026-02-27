@@ -35,6 +35,15 @@ export class Post {
   @Column({ name: 'reply_count', default: 0 })
   replyCount: number;
 
+  @Column({ name: 'like_count', default: 0 })
+  likeCount: number;
+
+  @Column({ name: 'favorite_count', default: 0 })
+  favoriteCount: number;
+
+  @Column({ name: 'share_count', default: 0 })
+  shareCount: number;
+
   @Column({ name: 'last_reply_at', type: 'timestamptz', nullable: true })
   lastReplyAt: Date | null;
 
