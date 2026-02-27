@@ -87,7 +87,7 @@
 | `favorite_count` | INTEGER | DEFAULT 0 | 收藏数冗余计数 |
 | `share_count` | INTEGER | DEFAULT 0 | 分享数冗余计数 |
 
-**状态值调整**：`posts.status` 新增 `'hidden'` 状态值（用于吧务隐藏）；保留既有 `'published'`、`'deleted'` 等状态语义。
+**状态值调整**：`posts.status` 使用 `'published' | 'hidden' | 'deleted'`（本阶段新增 `'hidden'` 用于吧务隐藏）。
 
 ### 4.2 replies 表扩展
 
@@ -97,7 +97,7 @@
 | `child_count` | INTEGER | DEFAULT 0 | 楼中楼子回复数量（仅主楼回复使用） |
 
 **结构调整**：`floor_number` 改为可空（`NULL`），仅主楼回复填充楼层号；楼中楼回复写 `NULL`。
-**状态值调整**：`replies.status` 新增 `'hidden'` 状态值（用于吧务隐藏）；保留既有 `'published'`、`'deleted'` 等状态语义。
+**状态值调整**：`replies.status` 使用 `'published' | 'hidden' | 'deleted'`（本阶段新增 `'hidden'` 用于吧务隐藏）。
 
 ### 4.3 新增 user_likes 表（点赞记录）
 
@@ -209,7 +209,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 - **说明**：设置帖子 `status = 'hidden'`
 - **成功响应** (200)：隐藏后的帖子对象
 - **错误**：403（权限不足或所属吧状态不可管理），404（帖子不存在）
-- **幂等性**：若帖子已是 `hidden`，返回 200 并保持当前状态（不重复变更计数/时间戳）。
+- **幂等性**：若帖子已是 `hidden`，返回 200 并保持当前状态（不重复变更计数，不更新 `updated_at`）。
 
 #### `POST /api/replies/:id/hide` — 隐藏回复
 - 类似隐藏帖子，作用于回复；若回复已是 `hidden`，返回 200 并保持当前状态。
@@ -236,7 +236,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
     "parentReplyId": "uuid"
   }
   ```
-- **校验**：`parentReplyId` 必须属于同一帖子；且当 `parentReplyId` 存在时，目标父回复必须为可见可回复状态（非 `deleted`、非 `hidden`），否则返回 404
+- **校验**：`parentReplyId` 必须属于同一帖子；且当 `parentReplyId` 存在时，目标父回复必须为可见可回复状态（`deleted_at IS NULL` 且 `status != 'hidden'`），否则返回 404
 - **成功响应** (201)：返回创建的回复对象，包含 `floorNumber`（主楼回复分配新楼层号，楼中楼回复返回 `null`）
 - **额外逻辑**：
   - 若为楼中楼回复，父回复的 `child_count` 字段需 +1（在事务内完成）。
