@@ -50,6 +50,16 @@ export class UsersController {
     return this.usersService.findMyCreatedBars(user.id, cursor, parsedLimit);
   }
 
+  @Get('me/favorites')
+  async myFavorites(
+    @CurrentUser() user: User,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : 20;
+    return this.usersService.findMyFavorites(user.id, cursor, parsedLimit);
+  }
+
   @Patch('me/profile')
   async updateProfile(
     @CurrentUser() user: User,

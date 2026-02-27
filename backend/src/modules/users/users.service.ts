@@ -6,6 +6,7 @@ import { Post } from '../posts/post.entity';
 import { Reply } from '../replies/reply.entity';
 import { BarMember } from '../bars/bar-member.entity';
 import { Bar } from '../bars/bar.entity';
+import { UserFavorite } from '../favorites/user-favorite.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Injectable()
@@ -23,6 +24,8 @@ export class UsersService {
     private readonly barMembersRepository: Repository<BarMember>,
     @InjectRepository(Bar)
     private readonly barsRepository: Repository<Bar>,
+    @InjectRepository(UserFavorite)
+    private readonly favoritesRepository: Repository<UserFavorite>,
   ) {}
 
   async findById(id: string): Promise<User> {
@@ -249,6 +252,58 @@ export class UsersService {
       suspendUntil: b.suspendUntil,
       createdAt: b.createdAt,
     }));
+
+    return { data, meta: { cursor: nextCursor, hasMore }, error: null };
+  }
+
+  async findMyFavorites(userId: string, cursor?: string, limit = 20) {
+    const take = Math.min(limit, 100);
+    const qb = this.favoritesRepository
+      .createQueryBuilder('fav')
+      .leftJoinAndSelect('fav.post', 'post')
+      .leftJoin('post.bar', 'bar')
+      .addSelect(['bar.name'])
+      .leftJoin('post.author', 'author')
+      .addSelect(['author.nickname'])
+      .where('fav.userId = :userId', { userId })
+      .orderBy('fav.createdAt', 'DESC')
+      .take(take + 1);
+
+    if (cursor) {
+      try {
+        const decodedDate = new Date(
+          Buffer.from(cursor, 'base64').toString('utf8'),
+        );
+        qb.andWhere('fav.createdAt < :ca', { ca: decodedDate });
+      } catch {
+        // invalid cursor
+      }
+    }
+
+    const favorites = await qb.getMany();
+    const hasMore = favorites.length > take;
+    const items = hasMore ? favorites.slice(0, take) : favorites;
+    const nextCursor =
+      hasMore && items.length > 0
+        ? Buffer.from(
+            items[items.length - 1].createdAt.toISOString(),
+          ).toString('base64')
+        : null;
+
+    const data = items.map((f) => {
+      const post = f.post;
+      const isUnavailable =
+        !post || post.deletedAt !== null || post.status === 'hidden' || post.status === 'deleted';
+
+      return {
+        id: f.id,
+        postId: f.postId,
+        title: isUnavailable ? '帖子已删除' : post.title,
+        barName: isUnavailable ? null : post.bar?.name ?? null,
+        authorNickname: isUnavailable ? null : post.author?.nickname ?? null,
+        favoritedAt: f.createdAt,
+      };
+    });
 
     return { data, meta: { cursor: nextCursor, hasMore }, error: null };
   }
