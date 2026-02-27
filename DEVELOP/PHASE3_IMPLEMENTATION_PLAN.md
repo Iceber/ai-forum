@@ -27,12 +27,12 @@
 ### 2.3 吧成员与社区治理能力（扩展）
 - **吧资料编辑**：吧主/版主可编辑吧描述、吧规、头像、分类（吧名不可修改）。
 - **吧务角色管理**：吧主可任命/撤销版主；吧主可将吧主身份转让给吧内其他成员。
-- **吧内内容管理**：吧主/版主可隐藏（`status = 'hidden'`）吧内帖子和回复，隐藏后对普通用户不可见。
+- **吧内内容管理**：吧主/版主可隐藏/取消隐藏（`status = 'hidden' | 'published'`）吧内帖子和回复，隐藏后对普通用户不可见。
 - **发帖权限**：`active` 状态的吧，任何登录用户均可发帖（无需加入）；`suspended`/`permanently_banned`/`closed` 状态下禁止发帖。
 
 ### 2.4 帖子与回复删除
-- **作者删除**：帖子/回复作者可删除自己的内容（软删除，设置 `deleted_at`）。
-- **吧务删除**：吧主/版主可删除吧内任意帖子/回复（软删除）。
+- **作者删除**：帖子/回复作者可删除自己的内容（软删除，设置 `deleted_at` 与 `status = 'deleted'`）。
+- **吧务删除**：吧主/版主可删除吧内任意帖子/回复（软删除，设置 `deleted_at` 与 `status = 'deleted'`）。
 - **删除后表现**：普通用户不可见已删除内容；作者本人可见“内容已删除”占位符。
 
 ### 2.5 内容表达与媒体能力
@@ -93,6 +93,8 @@
 |------|------|------|------|
 | `like_count` | INTEGER | DEFAULT 0 | 点赞数冗余计数 |
 | `child_count` | INTEGER | DEFAULT 0 | 楼中楼子回复数量（仅主楼回复使用） |
+
+**结构调整**：`floor_number` 改为可空（`NULL`），仅主楼回复填充楼层号；楼中楼回复写 `NULL`。
 
 ### 4.3 新增 user_likes 表（点赞记录）
 
@@ -164,8 +166,8 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 #### `GET /api/bars/:id/members` — 获取吧成员列表
 - **认证**：需要（Bearer Token）
 - **权限**：吧主或版主（普通成员不可获取完整成员列表）
-- **查询参数**：`cursor`（可选）、`limit`（默认 20，最大 100）
-- **响应**：成员列表，包含用户基本信息、角色、加入时间；支持按角色过滤（通过查询参数 `role`）
+- **查询参数**：`cursor`（可选）、`limit`（默认 20，最大 100）、`role`（可选，`member` | `moderator` | `owner`；非法值返回 400）
+- **响应**：成员列表，包含用户基本信息、角色、加入时间
 
 #### `PATCH /api/bars/:id/members/:userId/role` — 修改成员角色
 - **认证**：需要（Bearer Token）
@@ -207,6 +209,16 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 #### `POST /api/replies/:id/hide` — 隐藏回复
 - 类似隐藏帖子，作用于回复。
 
+#### `POST /api/posts/:id/unhide` — 取消隐藏帖子
+- **认证**：需要（Bearer Token）
+- **权限**：吧主或版主
+- **说明**：设置帖子 `status = 'published'`
+- **成功响应** (200)：取消隐藏后的帖子对象
+- **错误**：403（权限不足或所属吧状态不可管理），404（帖子不存在）
+
+#### `POST /api/replies/:id/unhide` — 取消隐藏回复
+- 类似取消隐藏帖子，作用于回复。
+
 ### 5.3 回复能力增强
 
 #### `POST /api/posts/:postId/replies` — 创建回复（扩展）
@@ -219,7 +231,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
   }
   ```
 - **校验**：`parentReplyId` 必须属于同一帖子
-- **成功响应** (201)：返回创建的回复对象，包含 `floorNumber`（主楼回复分配新楼层号，楼中楼回复无楼层号）
+- **成功响应** (201)：返回创建的回复对象，包含 `floorNumber`（主楼回复分配新楼层号，楼中楼回复返回 `null`）
 - **额外逻辑**：
   - 若为楼中楼回复，父回复的 `child_count` 字段需 +1（在事务内完成）。
   - 帖子总回复数 `reply_count` 仅对主楼回复递增，楼中楼回复不改变帖子回复计数。
@@ -228,7 +240,21 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 - **认证**：无需
 - **路径参数**：`replyId` — 父回复 ID
 - **查询参数**：`cursor`（基于 `created_at`）、`limit`（默认 10，最大 50）
-- **响应**：子回复列表（按创建时间升序），每条包含作者、内容、点赞数、是否楼主等
+- **响应**：子回复列表（按创建时间升序），每条包含：
+  ```json
+  {
+    "id": "uuid",
+    "content": "回复内容",
+    "contentType": "plaintext",
+    "author": { "id": "uuid", "nickname": "用户" },
+    "createdAt": "2025-01-01T00:00:00.000Z",
+    "likeCount": 3,
+    "isLiked": false,
+    "isAuthor": false,
+    "parentReplyId": "uuid",
+    "floorNumber": null
+  }
+  ```
 
 ### 5.4 互动接口
 
@@ -271,7 +297,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 - **权限**：作者本人、吧主、版主
 - **前置检查**：所属吧状态必须为 `active` 或 `suspended`，否则返回 403 `BAR_NOT_MANAGEABLE`
 - **成功响应** (204)
-- **说明**：软删除（设置 `deleted_at`），同时递归软删除该帖下所有回复（批量更新 `replies` 表设置 `deleted_at`，不逐条维护 `child_count`）。删除操作不记录到管理员审计日志。
+- **说明**：软删除（设置 `deleted_at` 与 `status = 'deleted'`），同时递归软删除该帖下所有回复（批量更新 `replies` 表设置 `deleted_at` 与 `status = 'deleted'`，不逐条维护 `child_count`）。删除操作不记录到管理员审计日志。
   - `child_count` 仅用于未删除主楼回复的子回复展示；父级主楼回复被删除时该计数不再用于前台展示，因此级联删除场景不做逐条回写，字段值可保持原值。
 
 #### `DELETE /api/replies/:id` — 删除回复
@@ -280,8 +306,8 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 - **前置检查**：所属吧状态必须为 `active` 或 `suspended`，否则返回 403
 - **成功响应** (204)
 - **说明**：
-  - 软删除（设置 `deleted_at`）。
-  - 若为父回复，其子回复一并软删除（级联）；该父回复删除后不再参与前台子回复计数展示，因此不逐条维护 `child_count`。
+  - 软删除（设置 `deleted_at` 与 `status = 'deleted'`）。
+  - 若为父回复，其子回复一并软删除（级联，设置 `deleted_at` 与 `status = 'deleted'`）；该父回复删除后不再参与前台子回复计数展示，因此不逐条维护 `child_count`。
   - 若为子回复，需同时将父回复的 `child_count` 减 1（在事务内完成）。
   - 删除操作不记录到管理员审计日志。
 
@@ -371,6 +397,15 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 | `components/editor/ImageUpload.tsx` | 图片上传组件（调用预签名接口，上传后插入内容） |
 | `components/bar/BarManageMenu.tsx` | 吧管理下拉菜单（编辑资料、成员管理） |
 
+### 6.3 用户操作流程
+- **互动（点赞/收藏/分享）**：帖子详情 → 点击点赞/收藏/分享 → 成功后计数即时更新；收藏同步进入“我的收藏”。
+- **楼中楼回复**：在主楼回复点击“回复/引用” → 填写内容 → 提交 → 子回复进入预览区（最开始 3 条升序展示）。
+- **成员管理与转让**：吧详情 → 管理菜单 → 成员列表 → 任命/撤销版主或转让吧主。
+- **隐藏/取消隐藏**：吧务在帖子/回复操作区执行隐藏或取消隐藏 → 状态更新，普通用户不可见。
+- **删除**：作者/吧务在操作区删除 → 内容替换为占位符，级联逻辑与计数规则按 §5.5。
+- **Markdown/上传**：发帖页切换 Markdown → 上传图片 → 插入链接 → 发布。
+- **我的收藏**：个人中心 → 我的收藏 → 浏览收藏列表并可取消收藏。
+
 ---
 
 ## 7. 后端模块规划
@@ -387,7 +422,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 
 | 模块 | 扩展内容 |
 |------|----------|
-| **bars** | 新增编辑资料、成员列表、角色管理、转让、隐藏内容接口；增强权限校验（吧主/版主）；在操作前检查吧状态可管理性 |
+| **bars** | 新增编辑资料、成员列表、角色管理、转让、隐藏/取消隐藏内容接口；增强权限校验（吧主/版主）；在操作前检查吧状态可管理性 |
 | **posts** | 新增点赞/收藏计数、删除接口；响应扩展 `isLiked`/`isFavorited` 字段；删除时递归软删除回复 |
 | **replies** | 新增楼中楼子回复查询、点赞计数、删除接口；响应扩展 `isAuthor`/`childCount`；维护 `child_count` 字段 |
 | **users** | 新增收藏列表查询（处理已删除帖子占位） |
@@ -420,8 +455,10 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 - 用户可分享帖子，分享次数递增。
 - 作者可删除自己的帖子/回复，吧主/版主可删除任意内容，删除后对普通用户隐藏。
 - 楼中楼回复可正常发布、分页加载。
+- 回复列表可展示楼主标识，引用回复可生成引用内容。
 - 吧主可在成员管理页面任命/撤销版主，转让吧主。
-- 吧主/版主可编辑吧资料，隐藏违规内容（仅在吧状态可管理时允许）。
+- 吧主可编辑所有吧资料字段，版主不可修改分类。
+- 吧主/版主可编辑吧资料，隐藏或取消隐藏违规内容（仅在吧状态可管理时允许）。
 - 支持 Markdown 发帖与图片上传。
 
 ---
