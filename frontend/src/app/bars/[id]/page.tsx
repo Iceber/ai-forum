@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { Bar, Post, PageMeta, ApiResponse } from '@/types';
 import BarPostsClient from './BarPostsClient';
+import { getBrowserApiBase } from '@/lib/browser-api-base';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_BASE = getBrowserApiBase();
 
 export default function BarPage() {
   const params = useParams<{ id: string }>();

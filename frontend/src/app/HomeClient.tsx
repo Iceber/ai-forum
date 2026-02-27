@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import type { Post, Bar, PageMeta, ApiResponse } from '@/types';
 import Link from 'next/link';
 import PostCard from '@/components/post/PostCard';
+import { getBrowserApiBase } from '@/lib/browser-api-base';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_BASE = getBrowserApiBase();
 
 interface HomeClientProps {
   initialPosts: Post[];

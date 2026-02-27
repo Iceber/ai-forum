@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { Post, Reply, ApiResponse } from '@/types';
 import PostRepliesClient from './PostRepliesClient';
+import { getBrowserApiBase } from '@/lib/browser-api-base';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_BASE = getBrowserApiBase();
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN', {

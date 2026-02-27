@@ -101,6 +101,7 @@ cat backend/migrations/001_initial_schema.sql | \
 | 变量名 | 示例值 | 说明 |
 |--------|--------|------|
 | `NEXT_PUBLIC_API_URL` | `http://localhost:3001` | 后端 API 地址（浏览器可访问） |
+| `NEXT_PUBLIC_API_PORT` | `3001` | 当未设置 `NEXT_PUBLIC_API_URL` 时，前端会使用当前访问域名/IP + 该端口拼接 API 地址 |
 | `API_INTERNAL_URL` | `http://backend:3001`（Docker） / `http://localhost:3001`（本地开发） | 仅服务端渲染使用的后端地址 |
 | `API_DEFAULT_URL` | `http://localhost:3001` | SSR 回退的默认后端地址 |
 
