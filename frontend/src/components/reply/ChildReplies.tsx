@@ -1,15 +1,21 @@
 'use client';
 
-import { useState } from 'react';
-import api from '@/lib/api-client';
+import { useEffect, useState } from 'react';
 import { ChildReply } from '@/types';
 import LikeButton from '@/components/interaction/LikeButton';
+import MarkdownContent from '@/components/editor/MarkdownContent';
+import { getBrowserApiBase } from '@/lib/browser-api-base';
 
 interface ChildRepliesProps {
   parentReplyId: string;
   childCount: number;
   initialPreview: ChildReply[];
   postAuthorId?: string;
+  onReply?: (
+    replyId: string,
+    authorNickname: string,
+    quotePrefix?: string,
+  ) => void;
 }
 
 export default function ChildReplies({
@@ -17,22 +23,45 @@ export default function ChildReplies({
   childCount,
   initialPreview,
   postAuthorId,
+  onReply,
 }: ChildRepliesProps) {
+  const apiBase = getBrowserApiBase();
   const [children, setChildren] = useState<ChildReply[]>(initialPreview);
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(childCount > 3);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
+  useEffect(() => {
+    setChildren((prev) => {
+      if (!expanded) return initialPreview;
+      const existingIds = new Set(prev.map((child) => child.id));
+      const merged = [...prev];
+      for (const child of initialPreview) {
+        if (!existingIds.has(child.id)) merged.push(child);
+      }
+      return merged;
+    });
+    if (!expanded) setHasMore(childCount > initialPreview.length);
+  }, [initialPreview, childCount, expanded]);
+
   const loadMore = async () => {
     setLoading(true);
     try {
       const params: Record<string, string> = { limit: '10' };
       if (cursor) params.cursor = cursor;
+      const query = new URLSearchParams(params).toString();
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
 
-      const res = await api.get(`/api/replies/${parentReplyId}/children`, { params });
-      const newChildren: ChildReply[] = res.data?.data ?? res.data ?? [];
-      const meta = res.data?.meta;
+      const res = await fetch(`${apiBase}/api/replies/${parentReplyId}/children?${query}`, {
+        headers,
+      });
+      if (!res.ok) throw new Error('Failed to load child replies');
+      const json = await res.json();
+      const newChildren: ChildReply[] = json.data ?? [];
+      const meta = json.meta;
 
       setChildren((prev) => {
         if (!expanded) return newChildren;
@@ -69,14 +98,28 @@ export default function ChildReplies({
               {new Date(child.createdAt).toLocaleString('zh-CN')}
             </span>
           </div>
-          <p className="text-gray-600">{child.content}</p>
-          <div className="mt-1">
+          <MarkdownContent content={child.content} className="text-gray-600 text-sm" />
+          <div className="mt-1 flex items-center gap-2">
             <LikeButton
               targetType="reply"
               targetId={child.id}
               initialLiked={child.isLiked ?? null}
               initialCount={child.likeCount ?? 0}
             />
+            {onReply && (
+              <button
+                onClick={() =>
+                  onReply(
+                    parentReplyId,
+                    child.author?.nickname ?? '匿名用户',
+                    `@${child.author?.nickname ?? '匿名用户'}`,
+                  )
+                }
+                className="inline-flex items-center gap-1 px-2 py-1 rounded text-sm text-gray-500 hover:text-blue-500 hover:bg-gray-100 transition-colors"
+              >
+                💬 回复
+              </button>
+            )}
           </div>
         </div>
       ))}

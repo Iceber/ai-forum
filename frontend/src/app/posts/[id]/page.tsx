@@ -31,6 +31,7 @@ export default function PostPage() {
   const [replies, setReplies] = useState<Reply[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [memberRole, setMemberRole] = useState<string | null>(null);
 
   useEffect(() => {
     if (!params.id) return;
@@ -53,8 +54,19 @@ export default function PostPage() {
             setNotFound(true);
           } else {
             const postJson: ApiResponse<Post> = await postRes.json();
-            if (postJson.data) setPost(postJson.data);
-            else setNotFound(true);
+            if (postJson.data) {
+              setPost(postJson.data);
+              if (token) {
+                const barRes = await fetch(
+                  `${apiBase}/api/bars/${postJson.data.barId}`,
+                  { headers },
+                );
+                if (barRes.ok) {
+                  const barJson = await barRes.json();
+                  setMemberRole(barJson?.data?.memberRole ?? null);
+                }
+              }
+            } else setNotFound(true);
           }
 
           if (repliesRes.ok) {
@@ -96,6 +108,21 @@ export default function PostPage() {
   }
 
   const canDelete = user && (user.id === post.authorId || user.role === 'admin');
+  const canModerate = user && (user.role === 'admin' || memberRole === 'owner' || memberRole === 'moderator');
+
+  const handleToggleHide = async () => {
+    try {
+      if (post.status === 'hidden') {
+        await apiClient.post(`/api/posts/${post.id}/unhide`);
+        setPost({ ...post, status: 'published' });
+      } else {
+        await apiClient.post(`/api/posts/${post.id}/hide`);
+        setPost({ ...post, status: 'hidden' });
+      }
+    } catch {
+      alert(post.status === 'hidden' ? '取消隐藏失败' : '隐藏帖子失败');
+    }
+  };
 
   return (
     <div>
@@ -137,6 +164,14 @@ export default function PostPage() {
             initialCount={post.favoriteCount ?? 0}
           />
           <ShareButton postId={post.id} initialCount={post.shareCount ?? 0} />
+          {canModerate && (
+            <button
+              onClick={handleToggleHide}
+              className="text-sm text-orange-500 hover:text-orange-700"
+            >
+              {post.status === 'hidden' ? '👁️ 取消隐藏' : '🙈 隐藏'}
+            </button>
+          )}
 
           {canDelete && (
             <button
@@ -154,6 +189,7 @@ export default function PostPage() {
         postId={post.id}
         postAuthorId={post.authorId}
         initialReplies={replies}
+        canModerate={!!canModerate}
       />
     </div>
   );

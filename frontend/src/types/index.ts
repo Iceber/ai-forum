@@ -61,6 +61,7 @@ export interface Reply {
   isAuthor?: boolean;
   parentReplyId?: string | null;
   childPreview?: ChildReply[];
+  status?: string;
   createdAt: string;
 }
 

@@ -1,21 +1,25 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import type { Reply } from '@/types';
+import type { Reply, ChildReply } from '@/types';
 import ReplyItem from '@/components/reply/ReplyItem';
 import useAuthStore from '@/lib/auth';
 import apiClient from '@/lib/api-client';
+import ImageUpload from '@/components/editor/ImageUpload';
+import { appendMarkdownImage } from '@/lib/markdown-image';
 
 interface PostRepliesClientProps {
   postId: string;
   postAuthorId?: string;
   initialReplies: Reply[];
+  canModerate?: boolean;
 }
 
 export default function PostRepliesClient({
   postId,
   postAuthorId,
   initialReplies,
+  canModerate,
 }: PostRepliesClientProps) {
   const { user } = useAuthStore();
   const [replies, setReplies] = useState<Reply[]>(initialReplies);
@@ -38,6 +42,32 @@ export default function PostRepliesClient({
       const res = await apiClient.post<Reply>(`/api/posts/${postId}/replies`, body);
       if (!replyingTo) {
         setReplies((prev) => [...prev, res.data]);
+      } else {
+        const createdChild: ChildReply = {
+          id: res.data.id,
+          content: res.data.content,
+          contentType: res.data.contentType,
+          author: res.data.author
+            ? { id: res.data.author.id, nickname: res.data.author.nickname }
+            : null,
+          createdAt: res.data.createdAt,
+          likeCount: res.data.likeCount ?? 0,
+          isLiked: false,
+          isAuthor: res.data.isAuthor,
+          parentReplyId: res.data.parentReplyId ?? replyingTo,
+          floorNumber: res.data.floorNumber,
+        };
+        setReplies((prev) =>
+          prev.map((reply) =>
+            reply.id === replyingTo
+              ? {
+                  ...reply,
+                  childCount: (reply.childCount ?? 0) + 1,
+                  childPreview: [...(reply.childPreview ?? []), createdChild],
+                }
+              : reply,
+          ),
+        );
       }
       setContent('');
       setReplyingTo(null);
@@ -49,10 +79,22 @@ export default function PostRepliesClient({
     }
   };
 
-  const handleReplyTo = (replyId: string, authorNickname: string) => {
+  const handleReplyTo = (replyId: string, authorNickname: string, quotePrefix?: string) => {
     setReplyingTo(replyId);
     setReplyingToNickname(authorNickname);
+    if (quotePrefix) {
+      setContent((prev) => (prev.trim() ? prev : `${quotePrefix} `));
+    }
     textareaRef.current?.focus();
+  };
+
+  const handleHideReply = async (replyId: string) => {
+    try {
+      await apiClient.post(`/api/replies/${replyId}/hide`);
+      setReplies((prev) => prev.filter((reply) => reply.id !== replyId));
+    } catch {
+      setError('隐藏回复失败');
+    }
   };
 
   return (
@@ -73,6 +115,8 @@ export default function PostRepliesClient({
               reply={reply}
               postAuthorId={postAuthorId}
               onReply={user ? handleReplyTo : undefined}
+              canModerate={canModerate}
+              onHide={handleHideReply}
             />
           ))}
         </div>
@@ -105,6 +149,13 @@ export default function PostRepliesClient({
             rows={4}
             className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
           />
+          <div className="mt-2">
+            <ImageUpload
+              onUpload={(fileUrl) => {
+                setContent((prev) => appendMarkdownImage(prev, fileUrl));
+              }}
+            />
+          </div>
           <div className="mt-2 flex justify-end">
             <button
               type="submit"

@@ -28,7 +28,7 @@ export default function ImageUpload({ onUpload }: ImageUploadProps) {
 
     setUploading(true);
     try {
-      const res = await api.post('/uploads/presign', {
+      const res = await api.post('/api/uploads/presign', {
         filename: file.name,
         contentType: file.type,
       });

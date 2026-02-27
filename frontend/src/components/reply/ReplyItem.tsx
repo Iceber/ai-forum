@@ -6,7 +6,13 @@ import type { Reply } from '@/types';
 interface ReplyItemProps {
   reply: Reply;
   postAuthorId?: string;
-  onReply?: (replyId: string, authorNickname: string) => void;
+  onReply?: (
+    replyId: string,
+    authorNickname: string,
+    quotePrefix?: string,
+  ) => void;
+  canModerate?: boolean;
+  onHide?: (replyId: string) => void;
 }
 
 function formatDate(dateStr: string) {
@@ -19,7 +25,13 @@ function formatDate(dateStr: string) {
   });
 }
 
-export default function ReplyItem({ reply, postAuthorId, onReply }: ReplyItemProps) {
+export default function ReplyItem({
+  reply,
+  postAuthorId,
+  onReply,
+  canModerate,
+  onHide,
+}: ReplyItemProps) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4">
       <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
@@ -55,6 +67,14 @@ export default function ReplyItem({ reply, postAuthorId, onReply }: ReplyItemPro
             💬 回复
           </button>
         )}
+        {canModerate && onHide && (
+          <button
+            onClick={() => onHide(reply.id)}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded text-sm text-orange-500 hover:text-orange-700 hover:bg-orange-50 transition-colors"
+          >
+            🙈 隐藏
+          </button>
+        )}
       </div>
 
       {/* Child replies (楼中楼) */}
@@ -64,6 +84,7 @@ export default function ReplyItem({ reply, postAuthorId, onReply }: ReplyItemPro
           childCount={reply.childCount ?? 0}
           initialPreview={reply.childPreview ?? []}
           postAuthorId={postAuthorId}
+          onReply={onReply}
         />
       )}
     </div>

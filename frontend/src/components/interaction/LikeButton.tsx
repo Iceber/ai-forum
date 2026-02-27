@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import api from '@/lib/api-client';
+import useAuthStore from '@/lib/auth';
 
 interface LikeButtonProps {
   targetType: 'post' | 'reply';
@@ -16,6 +17,7 @@ export default function LikeButton({
   initialLiked,
   initialCount,
 }: LikeButtonProps) {
+  const { user } = useAuthStore();
   const [isLiked, setIsLiked] = useState(initialLiked ?? false);
   const [count, setCount] = useState(initialCount);
   const [loading, setLoading] = useState(false);
@@ -26,7 +28,7 @@ export default function LikeButton({
       : `/api/replies/${targetId}/like`;
 
   const handleToggle = async () => {
-    if (initialLiked === null) {
+    if (!user) {
       window.location.href = '/login';
       return;
     }

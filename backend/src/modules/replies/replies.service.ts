@@ -103,6 +103,7 @@ export class RepliesService {
 
     // Batch fetch earliest 3 child replies per parent using a lateral-join-like approach
     const childPreviewMap = new Map<string, Reply[]>();
+    const childLikedIdSet = new Set<string>();
     if (replyIds.length > 0) {
       const allChildren = await this.repliesRepository
         .createQueryBuilder('reply')
@@ -121,6 +122,17 @@ export class RepliesService {
           childPreviewMap.set(parentId, list);
         }
       }
+
+      if (userId && allChildren.length > 0) {
+        const childIds = allChildren.map((child) => child.id);
+        const childLikes = await this.likesRepository
+          .createQueryBuilder('like')
+          .where('like.userId = :userId', { userId })
+          .andWhere('like.targetType = :type', { type: 'reply' })
+          .andWhere('like.targetId IN (:...ids)', { ids: childIds })
+          .getMany();
+        for (const like of childLikes) childLikedIdSet.add(like.targetId);
+      }
     }
 
     const data = items.map((reply) => ({
@@ -133,17 +145,19 @@ export class RepliesService {
       contentType: reply.contentType,
       likeCount: reply.likeCount,
       childCount: reply.childCount,
+      status: reply.status,
       isLiked: userId ? likedIdSet.has(reply.id) : null,
       isAuthor: post ? reply.authorId === post.authorId : false,
       parentReplyId: reply.parentReplyId,
-      childPreview: (childPreviewMap.get(reply.id) ?? []).map((c) => ({
-        id: c.id,
-        content: c.content,
-        contentType: c.contentType,
-        author: c.author,
-        createdAt: c.createdAt,
-        likeCount: c.likeCount,
-      })),
+        childPreview: (childPreviewMap.get(reply.id) ?? []).map((c) => ({
+          id: c.id,
+          content: c.content,
+          contentType: c.contentType,
+          author: c.author,
+          createdAt: c.createdAt,
+          likeCount: c.likeCount,
+          isLiked: userId ? childLikedIdSet.has(c.id) : null,
+        })),
       createdAt: reply.createdAt,
     }));
 

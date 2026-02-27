@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import apiClient from '@/lib/api-client';
 import useAuthStore from '@/lib/auth';
 import type { Bar, Post } from '@/types';
+import MarkdownEditor from '@/components/editor/MarkdownEditor';
+import ImageUpload from '@/components/editor/ImageUpload';
+import { appendMarkdownImage } from '@/lib/markdown-image';
 
 function CreatePostForm() {
   const router = useRouter();
@@ -45,6 +48,10 @@ function CreatePostForm() {
     e.preventDefault();
     if (!barId) {
       setError('请选择一个板块');
+      return;
+    }
+    if (!title.trim() || !content.trim()) {
+      setError('标题和内容不能为空');
       return;
     }
     setError('');
@@ -127,14 +134,29 @@ function CreatePostForm() {
                 {contentType === 'markdown' ? 'Markdown' : '纯文本'}
               </button>
             </div>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              required
-              rows={8}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              placeholder="请输入内容…"
-            />
+            {contentType === 'markdown' ? (
+              <MarkdownEditor
+                value={content}
+                onChange={setContent}
+                placeholder="请输入 Markdown 内容…"
+              />
+            ) : (
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                required
+                rows={8}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                placeholder="请输入内容…"
+              />
+            )}
+            <div className="mt-2">
+              <ImageUpload
+                onUpload={(fileUrl) => {
+                  setContent((prev) => appendMarkdownImage(prev, fileUrl));
+                }}
+              />
+            </div>
           </div>
 
           <button
