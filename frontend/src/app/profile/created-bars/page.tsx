@@ -48,7 +48,7 @@ export default function CreatedBarsPage() {
     const url = cursor
       ? `${API_BASE}/api/users/me/created-bars?cursor=${cursor}`
       : `${API_BASE}/api/users/me/created-bars`;
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { cache: 'no-store', headers });
     const json: ApiResponse<CreatedBar[]> = await res.json();
     return json;
   }, []);

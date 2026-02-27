@@ -39,7 +39,7 @@ export default function MyBarsPage() {
     const url = cursor
       ? `${API_BASE}/api/users/me/bars?cursor=${cursor}`
       : `${API_BASE}/api/users/me/bars`;
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { cache: 'no-store', headers });
     const json: ApiResponse<MyBar[]> = await res.json();
     return json;
   }, []);

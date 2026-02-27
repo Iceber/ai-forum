@@ -29,7 +29,7 @@ export class AdminService {
     const qb = this.barsRepository
       .createQueryBuilder('bar')
       .leftJoinAndSelect('bar.createdBy', 'creator')
-      .orderBy('bar.created_at', 'DESC')
+      .orderBy('bar.createdAt', 'DESC')
       .take(take + 1);
 
     if (status) {
@@ -41,7 +41,7 @@ export class AdminService {
         const decodedDate = new Date(
           Buffer.from(cursor, 'base64').toString('utf8'),
         );
-        qb.andWhere('bar.created_at < :ca', { ca: decodedDate });
+        qb.andWhere('bar.createdAt < :ca', { ca: decodedDate });
       } catch {
         // invalid cursor, ignore
       }
@@ -273,7 +273,7 @@ export class AdminService {
     const qb = this.adminActionsRepository
       .createQueryBuilder('action')
       .leftJoinAndSelect('action.admin', 'admin')
-      .orderBy('action.created_at', 'DESC')
+      .orderBy('action.createdAt', 'DESC')
       .take(take + 1);
 
     if (cursor) {
@@ -281,7 +281,7 @@ export class AdminService {
         const decodedDate = new Date(
           Buffer.from(cursor, 'base64').toString('utf8'),
         );
-        qb.where('action.created_at < :ca', { ca: decodedDate });
+        qb.where('action.createdAt < :ca', { ca: decodedDate });
       } catch {
         // invalid cursor, ignore
       }

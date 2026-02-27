@@ -31,7 +31,7 @@ export default function MyRepliesPage() {
     const url = cursor
       ? `${API_BASE}/api/users/me/replies?cursor=${cursor}`
       : `${API_BASE}/api/users/me/replies`;
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { cache: 'no-store', headers });
     const json: ApiResponse<MyReply[]> = await res.json();
     return json;
   }, []);

@@ -31,7 +31,7 @@ export default function MyPostsPage() {
     const url = cursor
       ? `${API_BASE}/api/users/me/posts?cursor=${cursor}`
       : `${API_BASE}/api/users/me/posts`;
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { cache: 'no-store', headers });
     const json: ApiResponse<MyPost[]> = await res.json();
     return json;
   }, []);
