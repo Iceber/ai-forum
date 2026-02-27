@@ -8,6 +8,8 @@ interface PostCardProps {
   barName: string;
   barId: string;
   replyCount: number;
+  likeCount?: number;
+  favoriteCount?: number;
   createdAt: string;
 }
 
@@ -29,6 +31,8 @@ export default function PostCard({
   barName,
   barId,
   replyCount,
+  likeCount,
+  favoriteCount,
   createdAt,
 }: PostCardProps) {
   const preview = content.length > 100 ? content.slice(0, 100) + '…' : content;
@@ -52,7 +56,11 @@ export default function PostCard({
         </Link>
         <span>{authorNickname}</span>
         <span>{formatDate(createdAt)}</span>
-        <span className="ml-auto">{replyCount} 回复</span>
+        <span className="ml-auto flex items-center gap-2">
+          {(likeCount ?? 0) > 0 && <span>❤️ {likeCount}</span>}
+          {(favoriteCount ?? 0) > 0 && <span>⭐ {favoriteCount}</span>}
+          <span>{replyCount} 回复</span>
+        </span>
       </div>
     </div>
   );
