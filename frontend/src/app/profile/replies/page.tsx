@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import ProfileNav from '@/components/profile/ProfileNav';
 import type { MyReply, PageMeta, ApiResponse } from '@/types';
+import { getBrowserApiBase } from '@/lib/browser-api-base';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_BASE = getBrowserApiBase();
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN', {

@@ -8,8 +8,9 @@ import BarPostsClient from './BarPostsClient';
 import BarStatusBadge from '@/components/bar/BarStatusBadge';
 import JoinBarButton from '@/components/bar/JoinBarButton';
 import useAuthStore from '@/lib/auth';
+import { getBrowserApiBase } from '@/lib/browser-api-base';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_BASE = getBrowserApiBase();
 
 export default function BarPage() {
   const params = useParams<{ id: string }>();

@@ -1,11 +1,13 @@
 import axios from 'axios';
 import type { ApiResponse } from '@/types';
+import { getBrowserApiBase } from '@/lib/browser-api-base';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const BASE_URL = getBrowserApiBase();
 
 const apiClient = axios.create({ baseURL: BASE_URL });
 
 apiClient.interceptors.request.use((config) => {
+  config.baseURL = getBrowserApiBase();
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('token');
     if (token) {
