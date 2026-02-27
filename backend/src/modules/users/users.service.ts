@@ -56,10 +56,9 @@ export class UsersService {
     const take = Math.min(limit, 100);
     const qb = this.postsRepository
       .createQueryBuilder('post')
-      .leftJoin('post.bar', 'bar')
-      .addSelect(['bar.id', 'bar.name'])
-      .where('post.author_id = :userId', { userId })
-      .orderBy('post.created_at', 'DESC')
+      .leftJoinAndSelect('post.bar', 'bar')
+      .where('post.authorId = :userId', { userId })
+      .orderBy('post.createdAt', 'DESC')
       .take(take + 1);
 
     if (cursor) {
@@ -67,7 +66,7 @@ export class UsersService {
         const decodedDate = new Date(
           Buffer.from(cursor, 'base64').toString('utf8'),
         );
-        qb.andWhere('post.created_at < :ca', { ca: decodedDate });
+        qb.andWhere('post.createdAt < :ca', { ca: decodedDate });
       } catch {
         // invalid cursor
       }
@@ -103,8 +102,8 @@ export class UsersService {
       .addSelect(['post.id', 'post.title', 'post.barId'])
       .leftJoin('post.bar', 'bar')
       .addSelect(['bar.name'])
-      .where('reply.author_id = :userId', { userId })
-      .orderBy('reply.created_at', 'DESC')
+      .where('reply.authorId = :userId', { userId })
+      .orderBy('reply.createdAt', 'DESC')
       .take(take + 1);
 
     if (cursor) {
@@ -112,7 +111,7 @@ export class UsersService {
         const decodedDate = new Date(
           Buffer.from(cursor, 'base64').toString('utf8'),
         );
-        qb.andWhere('reply.created_at < :ca', { ca: decodedDate });
+        qb.andWhere('reply.createdAt < :ca', { ca: decodedDate });
       } catch {
         // invalid cursor
       }
@@ -164,8 +163,8 @@ export class UsersService {
     const qb = this.barMembersRepository
       .createQueryBuilder('bm')
       .leftJoinAndSelect('bm.bar', 'bar')
-      .where('bm.user_id = :userId', { userId })
-      .orderBy('bm.joined_at', 'DESC')
+      .where('bm.userId = :userId', { userId })
+      .orderBy('bm.joinedAt', 'DESC')
       .take(take + 1);
 
     if (cursor) {
@@ -173,7 +172,7 @@ export class UsersService {
         const decodedDate = new Date(
           Buffer.from(cursor, 'base64').toString('utf8'),
         );
-        qb.andWhere('bm.joined_at < :ja', { ja: decodedDate });
+        qb.andWhere('bm.joinedAt < :ja', { ja: decodedDate });
       } catch {
         // invalid cursor
       }
@@ -217,8 +216,8 @@ export class UsersService {
 
     const qb = this.barsRepository
       .createQueryBuilder('bar')
-      .where('bar.created_by = :userId', { userId })
-      .orderBy('bar.created_at', 'DESC')
+      .where('bar.createdBy = :userId', { userId })
+      .orderBy('bar.createdAt', 'DESC')
       .take(take + 1);
 
     if (cursor) {
@@ -226,7 +225,7 @@ export class UsersService {
         const decodedDate = new Date(
           Buffer.from(cursor, 'base64').toString('utf8'),
         );
-        qb.andWhere('bar.created_at < :ca', { ca: decodedDate });
+        qb.andWhere('bar.createdAt < :ca', { ca: decodedDate });
       } catch {
         // invalid cursor
       }
