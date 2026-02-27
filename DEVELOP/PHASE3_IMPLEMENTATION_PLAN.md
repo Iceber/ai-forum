@@ -49,12 +49,12 @@
 
 ### 3.1 楼中楼回复展示与交互
 - 主楼回复（`parent_reply_id IS NULL`）按 `floor_number` 升序排列，每层展示：作者、内容、点赞按钮、楼主标识、子回复预览区。
-- 子回复预览区默认展示前 3 条最新子回复，按创建时间升序。超过 3 条时显示「查看剩余 xx 条回复」按钮，点击后展开完整分页列表（分页加载）。
+- 子回复预览区默认展示最开始的 3 条子回复，按创建时间升序。超过 3 条时显示「查看剩余 xx 条回复」按钮，点击后展开完整分页列表（分页加载）。
 - 子回复列表页支持分页（cursor 基于 `created_at`），每页 10 条，加载更多时追加在预览区下方。
 - 回复输入框增加“引用”图标，点击后自动填充被引用楼层的内容（格式：`> @用户名：内容`）。
 
 ### 3.2 点赞/收藏状态一致性
-- 帖子详情、回复列表接口返回 `isLiked`、`isFavorited` 字段（登录用户），未登录时返回 `null`。
+- 帖子详情接口返回 `isLiked`、`isFavorited` 字段（登录用户），未登录时返回 `null`；回复列表仅返回 `isLiked`（回复不可收藏）。
 - 点赞/收藏操作使用乐观更新：前端立即变更 UI，若请求失败则回滚并提示。
 - 点赞/收藏按钮附带计数，点击后计数瞬时变化。
 
@@ -141,7 +141,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 - 所有接口遵循 `DOC/arch.md` 定义的统一响应格式、认证方式（JWT）、错误码规范。
 - 分页采用 cursor 分页，游标编码规则与第二阶段一致（base64 编码的排序字段值）。
 - 涉及计数的冗余字段（如 `like_count`）在事务内同步更新。
-- 所有针对吧的管理操作（编辑资料、成员管理、隐藏、删除等）需检查吧状态：仅当吧状态为 `active` 或 `suspended` 时允许操作；若吧状态为 `permanently_banned` 或 `closed`，返回 `403 FORBIDDEN`，错误码 `BAR_NOT_MANAGEABLE`。
+- 所有针对吧的管理操作（编辑资料、成员管理、成员列表读取、隐藏、删除等）需检查吧状态：仅当吧状态为 `active` 或 `suspended` 时允许操作；若吧状态为 `permanently_banned` 或 `closed`，返回 `403 FORBIDDEN`，错误码 `BAR_NOT_MANAGEABLE`。
 
 ### 5.2 吧管理扩展
 
@@ -162,7 +162,8 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 - **错误**：403（权限不足或吧状态不可管理），404（吧不存在）
 
 #### `GET /api/bars/:id/members` — 获取吧成员列表
-- **认证**：可选（登录用户可获知自身角色）
+- **认证**：需要（Bearer Token）
+- **权限**：吧主或版主（普通成员不可获取完整成员列表）
 - **查询参数**：`cursor`（可选）、`limit`（默认 20，最大 100）
 - **响应**：成员列表，包含用户基本信息、角色、加入时间；支持按角色过滤（通过查询参数 `role`）
 
@@ -330,6 +331,8 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
   "isFavorited": false
 }
 ```
+
+> 回复不支持收藏：`GET /api/posts/:postId/replies` 的返回项不包含 `isFavorited` 字段。
 
 **回复列表响应**（`GET /api/posts/:postId/replies`）每条新增：
 ```json
