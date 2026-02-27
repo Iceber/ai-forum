@@ -30,7 +30,7 @@
 │          PostgreSQL 15  (localhost:5432)              │
 │          数据库: aiforum                              │
 │          表: users, bars, bar_members, posts, replies,│
-│              admin_actions                             │
+│              admin_actions, user_likes, user_favorites │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -55,7 +55,7 @@
 ```
 AppModule (根模块)
 ├── ConfigModule (全局配置，读取 .env)
-├── TypeOrmModule (PostgreSQL 连接，注册所有实体)
+├── TypeOrmModule (PostgreSQL 连接，注册所有实体: User, Bar, BarMember, Post, Reply, AdminAction, UserLike, UserFavorite)
 ├── AuthModule
 │   ├── → UsersModule (用户查询/创建)
 │   ├── → JwtModule (JWT 签发/验证)
@@ -67,6 +67,12 @@ AppModule (根模块)
 ├── AdminModule
 │   ├── → TypeOrmModule.forFeature([Bar, AdminAction])
 │   └── → BarsModule
+├── LikesModule (点赞)
+│   └── TypeORM: UserLike, Post, Reply
+├── FavoritesModule (收藏)
+│   └── TypeORM: UserFavorite, Post
+├── UploadsModule (媒体上传)
+│   └── ConfigService
 ├── PostsModule
 │   └── → TypeOrmModule.forFeature([Post])
 └── RepliesModule
@@ -308,6 +314,10 @@ frontend/
 | **components/reply** | 回复楼层（楼层号、作者、时间、内容） | `ReplyItem.tsx` |
 | **components/profile** | 个人中心侧边导航（我的帖子/回复/吧/创建的吧/编辑资料） | `ProfileNav.tsx` |
 | **components/admin** | 管理后台导航标签（待审核/吧管理/审计日志） | `AdminNav.tsx` |
+| **components/interaction** | 互动按钮：点赞、收藏、分享（乐观更新） | `LikeButton.tsx`, `FavoriteButton.tsx`, `ShareButton.tsx` |
+| **components/reply/ChildReplies** | 楼中楼子回复折叠区（分页加载） | `ChildReplies.tsx` |
+| **components/editor** | Markdown 编辑器、图片上传 | `MarkdownEditor.tsx`, `ImageUpload.tsx` |
+| **components/bar/BarManageMenu** | 吧管理下拉菜单（编辑资料、成员管理） | `BarManageMenu.tsx` |
 | **app/page + HomeClient** | 首页：帖子流 + 吧推荐 + 无限加载 | `page.tsx`, `HomeClient.tsx` |
 | **app/login** | 登录页：邮箱 + 密码，登录后跳转首页 | `login/page.tsx` |
 | **app/register** | 注册页：邮箱 + 密码 + 昵称，注册后自动登录 | `register/page.tsx` |
@@ -383,6 +393,9 @@ frontend/
 | `content` | TEXT | NOT NULL | 正文 |
 | `content_type` | VARCHAR(20) | DEFAULT 'plaintext' | 格式：`plaintext` / `markdown` |
 | `reply_count` | INTEGER | DEFAULT 0 | 回复数（冗余计数） |
+| `like_count` | INTEGER | DEFAULT 0 | 点赞数（冗余计数） |
+| `favorite_count` | INTEGER | DEFAULT 0 | 收藏数（冗余计数） |
+| `share_count` | INTEGER | DEFAULT 0 | 分享数（冗余计数） |
 | `last_reply_at` | TIMESTAMPTZ | NULL | 最后回复时间 |
 | `status` | VARCHAR(20) | DEFAULT 'published' | 状态：`published` / `hidden` / `deleted` / `under_review` |
 | `deleted_at` | TIMESTAMPTZ | NULL | 软删除标记 |
@@ -399,9 +412,11 @@ frontend/
 | `post_id` | UUID | FK → posts.id | 所属帖子 |
 | `author_id` | UUID | FK → users.id | 作者 |
 | `parent_reply_id` | UUID | FK → replies.id, NULL | 父回复（楼中楼，第一阶段置 null） |
-| `floor_number` | INTEGER | NOT NULL | 楼层号（帖内自增） |
+| `floor_number` | INTEGER | NULL | 楼层号（帖内自增，子回复为 NULL） |
 | `content` | TEXT | NOT NULL | 回复内容 |
 | `content_type` | VARCHAR(20) | DEFAULT 'plaintext' | 格式：`plaintext` / `markdown` |
+| `like_count` | INTEGER | DEFAULT 0 | 点赞数（冗余计数） |
+| `child_count` | INTEGER | DEFAULT 0 | 楼中楼子回复数量 |
 | `status` | VARCHAR(20) | DEFAULT 'published' | 状态（同帖子） |
 | `deleted_at` | TIMESTAMPTZ | NULL | 软删除标记 |
 | `created_at` | TIMESTAMPTZ | DEFAULT NOW() | 创建时间 |
@@ -427,7 +442,32 @@ frontend/
 - `(target_type, target_id)` — 按目标查询操作历史
 - `(created_at)` — 审计日志时间排序
 
-### 4.7 索引汇总
+### 4.7 user_likes（点赞记录表）
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | UUID | PK | 记录 ID |
+| `user_id` | UUID | FK → users.id, NOT NULL | 点赞用户 |
+| `target_type` | VARCHAR(20) | NOT NULL | 目标类型：`post` / `reply` |
+| `target_id` | UUID | NOT NULL | 目标 ID |
+| `created_at` | TIMESTAMPTZ | DEFAULT NOW() | 点赞时间 |
+
+**约束**: UNIQUE(user_id, target_type, target_id)
+**索引**: `(target_type, target_id)` — 查询目标的点赞列表
+
+### 4.8 user_favorites（收藏记录表）
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | UUID | PK | 记录 ID |
+| `user_id` | UUID | FK → users.id, NOT NULL | 收藏用户 |
+| `post_id` | UUID | FK → posts.id, NOT NULL | 收藏帖子 |
+| `created_at` | TIMESTAMPTZ | DEFAULT NOW() | 收藏时间 |
+
+**约束**: UNIQUE(user_id, post_id)
+**索引**: `(user_id, created_at)` — 个人中心收藏列表
+
+### 4.9 索引汇总
 
 | 表 | 索引 | 用途 |
 |------|------|------|
@@ -438,6 +478,9 @@ frontend/
 | `admin_actions` | `(admin_id, created_at)` | 管理员操作历史 |
 | `admin_actions` | `(target_type, target_id)` | 目标操作历史 |
 | `admin_actions` | `(created_at)` | 审计日志时间排序 |
+| `user_likes` | `(target_type, target_id)` | 目标点赞查询 |
+| `user_favorites` | `(user_id, created_at)` | 收藏列表查询 |
+| `replies` | `(parent_reply_id, created_at) WHERE parent_reply_id IS NOT NULL` | 楼中楼子回复查询 |
 
 ---
 
@@ -941,6 +984,26 @@ frontend/
 | POST | `/api/admin/bars/:id/ban` | 是 (Admin) | 永久封禁吧 |
 | POST | `/api/admin/bars/:id/close` | 是 (Admin) | 关闭吧 |
 | GET | `/api/admin/actions` | 是 (Admin) | 审计日志 |
+| PATCH | `/api/bars/:id` | 是 | 编辑吧资料（吧主/版主） |
+| GET | `/api/bars/:id/members` | 是 | 获取吧成员列表（吧主/版主） |
+| PATCH | `/api/bars/:id/members/:userId/role` | 是 | 修改成员角色（仅吧主） |
+| POST | `/api/bars/:id/transfer` | 是 | 转让吧主（仅吧主） |
+| DELETE | `/api/posts/:id` | 是 | 删除帖子（作者/吧主/版主） |
+| POST | `/api/posts/:id/like` | 是 | 点赞帖子 |
+| DELETE | `/api/posts/:id/like` | 是 | 取消点赞帖子 |
+| POST | `/api/posts/:id/favorite` | 是 | 收藏帖子 |
+| DELETE | `/api/posts/:id/favorite` | 是 | 取消收藏帖子 |
+| POST | `/api/posts/:id/share` | 是 | 记录分享 |
+| POST | `/api/posts/:id/hide` | 是 | 隐藏帖子（吧主/版主） |
+| POST | `/api/posts/:id/unhide` | 是 | 取消隐藏帖子 |
+| DELETE | `/api/replies/:id` | 是 | 删除回复（作者/吧主/版主） |
+| POST | `/api/replies/:id/like` | 是 | 点赞回复 |
+| DELETE | `/api/replies/:id/like` | 是 | 取消点赞回复 |
+| POST | `/api/replies/:id/hide` | 是 | 隐藏回复（吧主/版主） |
+| POST | `/api/replies/:id/unhide` | 是 | 取消隐藏回复 |
+| GET | `/api/replies/:replyId/children` | 否 | 获取楼中楼子回复 |
+| GET | `/api/users/me/favorites` | 是 | 我的收藏列表 |
+| POST | `/api/uploads/presign` | 是 | 获取预签名上传 URL |
 
 ---
 
@@ -954,7 +1017,7 @@ frontend/
 | 发帖 | `/create-post` | CSR（需登录） | `GET /api/bars`, `POST /api/posts` |
 | 创建吧 | `/create-bar` | CSR（需登录） | `POST /api/bars` |
 | 吧详情 | `/bars/[id]` | CSR | `GET /api/bars/:id`, `GET /api/posts?barId=...&limit=20`, `POST /api/bars/:id/join`, `POST /api/bars/:id/leave` |
-| 帖子详情 | `/posts/[id]` | CSR | `GET /api/posts/:id`, `GET /api/posts/:id/replies?limit=50` |
+| 帖子详情 | `/posts/[id]` | CSR | `GET /api/posts/:id`, `GET /api/posts/:id/replies?limit=50`, `POST/DELETE /api/posts/:id/like`, `POST/DELETE /api/posts/:id/favorite`, `POST /api/posts/:id/share`, `DELETE /api/posts/:id` |
 | 个人中心 — 我的帖子 | `/profile` | CSR（需登录） | `GET /api/users/me/posts` |
 | 个人中心 — 我的回复 | `/profile/replies` | CSR（需登录） | `GET /api/users/me/replies` |
 | 个人中心 — 我的吧 | `/profile/bars` | CSR（需登录） | `GET /api/users/me/bars` |
@@ -963,6 +1026,7 @@ frontend/
 | 管理后台 — 待审核 | `/admin/bars/pending` | CSR（需 Admin） | `GET /api/admin/bars?status=pending_review` |
 | 管理后台 — 吧管理 | `/admin` | CSR（需 Admin） | `GET /api/admin/bars`, `POST /api/admin/bars/:id/{action}` |
 | 管理后台 — 审计日志 | `/admin/actions` | CSR（需 Admin） | `GET /api/admin/actions` |
+| 个人中心 — 我的收藏 | `/profile/favorites` | CSR（需登录） | `GET /api/users/me/favorites`, `DELETE /api/posts/:id/favorite` |
 
 ---
 
@@ -1001,19 +1065,27 @@ services:
 
 ---
 
-## 9. 第三阶段扩展预留
+## 9. 第三阶段已实现功能
 
-当前架构已为后续功能预留以下扩展点：
+Phase 3 已实现以下核心功能：
 
-| 预留点 | 当前状态 | 扩展方向 |
+| 功能 | 状态 | 说明 |
 |--------|---------|---------|
-| `parent_reply_id` 字段 | 第一阶段置 null | 二级回复（楼中楼） |
-| `content_type` 字段 | 仅 plaintext | Markdown / 富文本渲染 |
-| `status` + `deleted_at` | 仅 published | 审核队列、软删除流程 |
-| `token_version` | 默认 0 | 改密/封禁后 JWT 失效 |
-| `email_verified` | 默认 false | 邮箱验证流程 |
-| `auth_provider` | 默认 local | 第三方 OAuth 登录 |
+| 楼中楼回复 | ✅ 已实现 | `parent_reply_id` 支持二级回复，子回复预览+分页 |
+| 点赞/收藏/分享 | ✅ 已实现 | `user_likes`/`user_favorites` 表，帖子+回复点赞，帖子收藏/分享 |
+| 内容删除 | ✅ 已实现 | 软删除（`deleted_at` + `status='deleted'`），级联删除子回复 |
+| 内容隐藏 | ✅ 已实现 | 吧主/版主可隐藏/取消隐藏帖子和回复（`status='hidden'`） |
+| 吧资料编辑 | ✅ 已实现 | 吧主可编辑所有字段，版主不可修改分类 |
+| 成员管理 | ✅ 已实现 | 成员列表、角色变更、吧主转让 |
+| Markdown 支持 | ✅ 已实现 | `content_type='markdown'`，前端编辑器 |
+| 媒体上传 | ✅ 已实现 | 预签名 URL 上传，图片插入 |
+| 个人中心收藏 | ✅ 已实现 | 收藏列表（含已删除帖占位） |
+
+### 后续扩展预留
+
+| 预留点 | 状态 | 扩展方向 |
+|--------|---------|---------|
 | AI embedding | 未实现 | pgvector 内容向量化、相关帖推荐 |
-| moderation_logs | 未实现 | AI 审核 + 人工治理日志 |
-| 吧主/版主管理 | bar_members role 已预留 | 版主任命、吧内内容管理 |
-| 通知系统 | 未实现 | 审核结果通知、回复通知 |
+| 消息通知 | 未实现 | @提醒、系统通知 |
+| 全局搜索 | 未实现 | 帖子/吧全文搜索 |
+| 用户封禁 | 未实现 | 全站范围用户封禁 |
