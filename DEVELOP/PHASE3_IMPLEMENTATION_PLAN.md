@@ -423,7 +423,7 @@ CREATE INDEX idx_replies_parent_reply_id ON replies (parent_reply_id, created_at
 
 ---
 
-## 11. 一致性校验结论（相对旧版 PRE_PHASE3）
+## 11. 一致性校验结论（相对旧版第三阶段草案）
 
 - 旧版“头像编辑（`PATCH /api/users/me/profile` 扩展 `avatarUrl`）”与本阶段边界冲突，已移除，保持与第二阶段一致。
 - 旧版“扩展 `admin_actions` 记录吧务隐藏操作”与本版要求冲突，已修订为“`admin_actions` 不扩展”。

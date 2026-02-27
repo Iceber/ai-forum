@@ -6,7 +6,7 @@
 
 - 在第一阶段 MVP 的基础上，完成吧的创建与审核流程、管理员后台治理能力、基础社区成员关系以及个人中心体验。
 - AI 相关能力（重复帖检测、审核辅助、摘要）继续保持在后续版本，不纳入本阶段。
-- 互动能力（点赞/收藏/分享）、回复增强（楼中楼）、内容删除、媒体上传等功能移入 PRE_PHASE3 实现。
+- 互动能力（点赞/收藏/分享）、回复增强（楼中楼）、内容删除、媒体上传等功能移入 PHASE3_IMPLEMENTATION_PLAN 实现。
 
 ---
 
@@ -45,7 +45,7 @@
 - 我的回复：查看自己发布的回复列表。
 - 我的吧：查看已加入吧列表。
 - 我创建的吧：查看自己申请创建的吧及其审核状态。
-- 个人资料编辑：修改昵称、个人签名（头像编辑移入 PRE_PHASE3）。
+- 个人资料编辑：修改昵称、个人签名（头像编辑移入 PHASE3_IMPLEMENTATION_PLAN）。
 
 ---
 
@@ -72,7 +72,7 @@
 - 被拒绝的记录保留可查阅，不可删除。
 
 ### 3.3 个人资料编辑安全边界
-- 头像编辑（包括头像 URL 填写与预签名上传链路）整体移入 PRE_PHASE3；第二阶段个人资料编辑仅支持修改昵称和个人签名，不涉及头像字段。
+- 头像编辑（包括头像 URL 填写与预签名上传链路）整体移入 PHASE3_IMPLEMENTATION_PLAN；第二阶段个人资料编辑仅支持修改昵称和个人签名，不涉及头像字段。
 - 个人签名限长 200 字符。
 
 ### 3.4 管理员身份判定
@@ -98,7 +98,7 @@
 |------|------|------|
 | `memberCount` | integer | 吧成员数 |
 | `isMember` | boolean \| null | 已登录时返回是否已加入，未登录返回 `null` |
-| `memberRole` | string \| null | 已加入时返回角色（`member` / `owner`），否则 `null`。`moderator` 角色在 PRE_PHASE3 启用，第二阶段仅有 `member` 和 `owner` |
+| `memberRole` | string \| null | 已加入时返回角色（`member` / `owner`），否则 `null`。`moderator` 角色在 PHASE3_IMPLEMENTATION_PLAN 启用，第二阶段仅有 `member` 和 `owner` |
 | `suspendUntil` | ISO8601 \| null | 临时封禁时返回到期时间，其他状态为 `null` |
 | `statusReason` | string \| null | 状态变更原因（`rejected`/`suspended`/`permanently_banned`/`closed` 时有值），其他状态为 `null` |
 
@@ -182,7 +182,7 @@ ALTER TABLE bars ALTER COLUMN status SET DEFAULT 'pending_review';
 
 **`action` 枚举值**：`approve`、`reject`、`suspend`、`unsuspend`、`ban`、`close`。
 
-> PRE_PHASE3 中将扩展 `target_type` 支持 `post` / `reply`，并新增 `hide_post`、`hide_reply` 等操作类型。
+> PHASE3_IMPLEMENTATION_PLAN 中将扩展 `target_type` 支持 `post` / `reply`，并新增 `hide_post`、`hide_reply` 等操作类型。
 
 **索引**：`(target_type, target_id, created_at)` — 查询某目标的操作历史。
 
@@ -446,7 +446,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 | 个人中心 | `/profile` | CSR（需登录） | 个人中心首页（我的帖子，默认页签） |
 | 我的回复 | `/profile/replies` | CSR（需登录） | 我的回复列表（cursor 分页） |
 | 我的吧 | `/profile/bars` | CSR（需登录） | 已加入吧列表（cursor 分页） |
-| 个人资料编辑 | `/profile/edit` | CSR（需登录） | 编辑昵称、签名（头像编辑在 PRE_PHASE3） |
+| 个人资料编辑 | `/profile/edit` | CSR（需登录） | 编辑昵称、签名（头像编辑在 PHASE3_IMPLEMENTATION_PLAN） |
 | 我创建的吧 | `/profile/created-bars` | CSR（需登录） | 查看创建的吧及审核状态 |
 | 管理员后台 | `/admin` | CSR（需 admin） | 管理员仪表盘入口 |
 | 吧审核列表 | `/admin/bars/pending` | CSR（需 admin） | 待审核吧列表与审核操作 |
@@ -498,12 +498,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uidx_bar_members_bar_user ON bar_members (bar_
 ## 8. 阶段边界（本阶段不做）
 
 - 不实现任何 AI 相关功能：重复帖检测、AI 审核提示、长帖摘要。
-- 不实现互动能力：点赞、收藏、分享（移入 PRE_PHASE3）。
-- 不实现回复增强：楼中楼回复、引用回复、楼主标识（移入 PRE_PHASE3）。
-- 不实现社区治理扩展：吧资料编辑、角色管理、吧主转让、内容隐藏（移入 PRE_PHASE3）。
-- 不实现帖子/回复删除（移入 PRE_PHASE3）。
-- 不实现头像编辑（头像 URL 填写与预签名上传链路均移入 PRE_PHASE3）。
-- 不实现 Markdown 渲染与媒体上传（移入 PRE_PHASE3）。
+- 不实现互动能力：点赞、收藏、分享（移入 PHASE3_IMPLEMENTATION_PLAN）。
+- 不实现回复增强：楼中楼回复、引用回复、楼主标识（移入 PHASE3_IMPLEMENTATION_PLAN）。
+- 不实现社区治理扩展：吧资料编辑、角色管理、吧主转让、内容隐藏（移入 PHASE3_IMPLEMENTATION_PLAN）。
+- 不实现帖子/回复删除（移入 PHASE3_IMPLEMENTATION_PLAN）。
+- 不实现头像编辑（头像 URL 填写与预签名上传链路均移入 PHASE3_IMPLEMENTATION_PLAN）。
+- 不实现 Markdown 渲染与媒体上传（移入 PHASE3_IMPLEMENTATION_PLAN）。
 - 不实现通知与提醒能力（@提醒、消息中心）。
 - 不实现全局搜索能力。
 - 不实现接口限流。
@@ -670,7 +670,7 @@ admin/bars       │
 
 **细节说明**：
 - 退出操作需要确认弹窗防误操作。
-- 吧主的"退出吧"按钮仍展示，但点击后提示转让说明（吧主转让在 PRE_PHASE3 实现）。
+- 吧主的"退出吧"按钮仍展示，但点击后提示转让说明（吧主转让在 PHASE3_IMPLEMENTATION_PLAN 实现）。
 - `suspended` 状态的吧：加入和退出按钮均正常展示可操作。
 - `permanently_banned` 或 `closed` 状态的吧：加入和退出按钮均禁用，已加入的成员仅可浏览历史内容。
 
@@ -729,7 +729,7 @@ admin/bars       │
 ```
 
 **细节说明**：
-- 头像编辑（URL 填写与预签名上传）整体移入 PRE_PHASE3，第二阶段个人资料编辑仅支持修改昵称和签名。
+- 头像编辑（URL 填写与预签名上传）整体移入 PHASE3_IMPLEMENTATION_PLAN，第二阶段个人资料编辑仅支持修改昵称和签名。
 - 个人签名限长 200 字符，前端展示实时字符计数。
 - 所有字段均为选填，只提交有修改的字段（PATCH 语义）。
 
