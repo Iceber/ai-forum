@@ -1,10 +1,12 @@
 import LikeButton from '@/components/interaction/LikeButton';
 import ChildReplies from '@/components/reply/ChildReplies';
+import MarkdownContent from '@/components/editor/MarkdownContent';
 import type { Reply } from '@/types';
 
 interface ReplyItemProps {
   reply: Reply;
   postAuthorId?: string;
+  onReply?: (replyId: string, authorNickname: string) => void;
 }
 
 function formatDate(dateStr: string) {
@@ -17,7 +19,7 @@ function formatDate(dateStr: string) {
   });
 }
 
-export default function ReplyItem({ reply, postAuthorId }: ReplyItemProps) {
+export default function ReplyItem({ reply, postAuthorId, onReply }: ReplyItemProps) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4">
       <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
@@ -36,7 +38,7 @@ export default function ReplyItem({ reply, postAuthorId }: ReplyItemProps) {
         )}
         <span className="ml-auto">{formatDate(reply.createdAt)}</span>
       </div>
-      <p className="text-sm text-gray-800 whitespace-pre-wrap">{reply.content}</p>
+      <MarkdownContent content={reply.content} className="text-sm text-gray-800" />
 
       <div className="mt-2 flex items-center gap-2">
         <LikeButton
@@ -45,6 +47,14 @@ export default function ReplyItem({ reply, postAuthorId }: ReplyItemProps) {
           initialLiked={reply.isLiked ?? null}
           initialCount={reply.likeCount ?? 0}
         />
+        {onReply && (
+          <button
+            onClick={() => onReply(reply.id, reply.author?.nickname ?? '匿名')}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded text-sm text-gray-500 hover:text-blue-500 hover:bg-gray-100 transition-colors"
+          >
+            💬 回复
+          </button>
+        )}
       </div>
 
       {/* Child replies (楼中楼) */}

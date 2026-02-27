@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import MarkdownContent from './MarkdownContent';
 
 interface MarkdownEditorProps {
   value: string;
@@ -42,8 +43,12 @@ export default function MarkdownEditor({
         </button>
       </div>
       {preview ? (
-        <div className="p-4 min-h-[200px] prose prose-sm max-w-none">
-          {value || <span className="text-gray-400">暂无内容</span>}
+        <div className="p-4 min-h-[200px]">
+          {value ? (
+            <MarkdownContent content={value} className="prose prose-sm max-w-none" />
+          ) : (
+            <span className="text-gray-400">暂无内容</span>
+          )}
         </div>
       ) : (
         <textarea

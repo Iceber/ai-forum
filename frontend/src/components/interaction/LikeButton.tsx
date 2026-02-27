@@ -22,8 +22,8 @@ export default function LikeButton({
 
   const endpoint =
     targetType === 'post'
-      ? `/posts/${targetId}/like`
-      : `/replies/${targetId}/like`;
+      ? `/api/posts/${targetId}/like`
+      : `/api/replies/${targetId}/like`;
 
   const handleToggle = async () => {
     if (initialLiked === null) {

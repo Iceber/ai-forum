@@ -21,6 +21,7 @@ export default function PostRepliesClient({
   const [replies, setReplies] = useState<Reply[]>(initialReplies);
   const [content, setContent] = useState('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyingToNickname, setReplyingToNickname] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -39,11 +40,20 @@ export default function PostRepliesClient({
       }
       setContent('');
       setReplyingTo(null);
+      setReplyingToNickname('');
     } catch (err) {
       setError(err instanceof Error ? err.message : '提交失败');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleReplyTo = (replyId: string, authorNickname: string) => {
+    setReplyingTo(replyId);
+    setReplyingToNickname(authorNickname);
+    // Focus the textarea
+    const textarea = document.querySelector('textarea[name="reply-content"]') as HTMLTextAreaElement | null;
+    textarea?.focus();
   };
 
   return (
@@ -63,6 +73,7 @@ export default function PostRepliesClient({
               key={reply.id}
               reply={reply}
               postAuthorId={postAuthorId}
+              onReply={user ? handleReplyTo : undefined}
             />
           ))}
         </div>
@@ -72,14 +83,14 @@ export default function PostRepliesClient({
       {user ? (
         <form onSubmit={handleSubmit} className="mt-6 bg-white rounded-lg border border-gray-200 p-4">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">
-            {replyingTo ? '回复楼中楼' : '发表回复'}
+            {replyingTo ? `回复 ${replyingToNickname}` : '发表回复'}
             {replyingTo && (
               <button
                 type="button"
-                onClick={() => setReplyingTo(null)}
+                onClick={() => { setReplyingTo(null); setReplyingToNickname(''); }}
                 className="ml-2 text-xs text-gray-400 hover:text-gray-600"
               >
-                取消引用
+                取消
               </button>
             )}
           </h3>
@@ -87,6 +98,7 @@ export default function PostRepliesClient({
             <p className="text-red-500 text-sm mb-2">{error}</p>
           )}
           <textarea
+            name="reply-content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="请输入回复内容…"

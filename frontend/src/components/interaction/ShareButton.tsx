@@ -19,7 +19,7 @@ export default function ShareButton({ postId, initialCount }: ShareButtonProps) 
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
 
-      const res = await api.post(`/posts/${postId}/share`);
+      const res = await api.post(`/api/posts/${postId}/share`);
       if (res.data?.shareCount !== undefined) {
         setCount(res.data.shareCount);
       } else {

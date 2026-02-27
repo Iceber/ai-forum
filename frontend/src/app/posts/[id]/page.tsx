@@ -11,6 +11,7 @@ import ShareButton from '@/components/interaction/ShareButton';
 import { getBrowserApiBase } from '@/lib/browser-api-base';
 import useAuthStore from '@/lib/auth';
 import apiClient from '@/lib/api-client';
+import MarkdownContent from '@/components/editor/MarkdownContent';
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN', {
@@ -118,8 +119,8 @@ export default function PostPage() {
           <span>{formatDate(post.createdAt)}</span>
           <span className="ml-auto">{post.replyCount} 回复</span>
         </div>
-        <div className="prose prose-sm max-w-none text-gray-800 whitespace-pre-wrap border-t pt-4">
-          {post.content}
+        <div className="border-t pt-4">
+          <MarkdownContent content={post.content} className="prose prose-sm max-w-none text-gray-800" />
         </div>
 
         {/* Interaction buttons */}

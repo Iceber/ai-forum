@@ -30,7 +30,7 @@ export default function ChildReplies({
       const params: Record<string, string> = { limit: '10' };
       if (cursor) params.cursor = cursor;
 
-      const res = await api.get(`/replies/${parentReplyId}/children`, { params });
+      const res = await api.get(`/api/replies/${parentReplyId}/children`, { params });
       const newChildren: ChildReply[] = res.data?.data ?? res.data ?? [];
       const meta = res.data?.meta;
 

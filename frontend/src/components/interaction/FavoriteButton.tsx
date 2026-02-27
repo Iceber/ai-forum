@@ -32,9 +32,9 @@ export default function FavoriteButton({
 
     try {
       if (prevFav) {
-        await api.delete(`/posts/${postId}/favorite`);
+        await api.delete(`/api/posts/${postId}/favorite`);
       } else {
-        await api.post(`/posts/${postId}/favorite`);
+        await api.post(`/api/posts/${postId}/favorite`);
       }
     } catch {
       setIsFavorited(prevFav);
